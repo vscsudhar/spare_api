@@ -172,6 +172,18 @@ const rareQuotationSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    discount: {
+      type: Number,
+      default: 0,
+    },
+    deliveryTimeline: {
+      type: String,
+      default: '3 - 5 Days Delivery',
+    },
+    adminNotes: {
+      type: String,
+      default: '',
+    },
     grandTotal: {
       type: Number, // Stored in paise
       required: true,

@@ -5,6 +5,8 @@ import catchAsync from '../utils/catchAsync.js';
 import Users from '../modules/users/users.model.js';
 
 export const protect = catchAsync(async (req, res, next) => {
+  // Allow preflight OPTIONS requests
+  if (req.method === 'OPTIONS') return next();
   // 1. Get access token from header
   let token;
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
@@ -69,6 +71,34 @@ export const protect = catchAsync(async (req, res, next) => {
   req.user = user;
   req.permissions = Array.from(permissionNames);
   req.isOwner = isOwner;
+
+  next();
+});
+
+export const optionalProtect = catchAsync(async (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+
+  let token;
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
+    const user = await Users.findById(decoded.id);
+    if (user && user.status === 'active') {
+      req.user = user;
+    } else {
+      req.user = null;
+    }
+  } catch (_) {
+    req.user = null;
+  }
 
   next();
 });

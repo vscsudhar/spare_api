@@ -161,7 +161,7 @@ const orderSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['unpaid', 'partially_paid', 'paid', 'refunded', 'partially_refunded'],
+      enum: ['pending', 'unpaid', 'partially_paid', 'paid', 'failed', 'refunded', 'partially_refunded'],
       default: 'unpaid',
       required: true,
     },

@@ -1,3 +1,4 @@
+import Order from '../orders/orders.model.js';
 import Billing from './billing.model.js';
 import Products from '../products/products.model.js';
 import { InventoryItem, StockMovement } from '../inventory/inventory.model.js';
@@ -140,10 +141,89 @@ export const billingService = {
         );
       }
 
-      // Generate invoice number
-      const invoiceNumber = `INV-${Date.now().toString().substring(6)}`;
+      // Prepare Order items with productSnapshot
+      const orderItems = [];
+      for (const item of calculation.items) {
+        const prod = await Products.findById(item.product).session(session);
+        orderItems.push({
+          product: item.product,
+          productSnapshot: {
+            name: prod?.name || item.name,
+            sku: prod?.sku || 'SKU-POS',
+            slug: prod?.slug || (prod?.name || item.name).toLowerCase().replace(/\s+/g, '-'),
+            sellingPrice: prod?.sellingPrice ?? item.unitPrice,
+            purchasePrice: prod?.purchasePrice ?? 0,
+            mrp: prod?.mrp ?? prod?.sellingPrice ?? item.unitPrice,
+            image: prod?.images?.[0]?.url || '',
+          },
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          taxPercentage: prod?.taxPercentage || 18,
+          totalPrice: item.totalPrice,
+        });
+      }
 
-      // Save billing invoice
+      // Generate invoice number and order number
+      const timestampSuffix = Date.now().toString().substring(6);
+      const invoiceNumber = `INV-${timestampSuffix}`;
+      const orderNumber = `ORD-POS-${timestampSuffix}`;
+
+      // Create Order with status 'delivered' and paymentStatus 'paid'
+      const [order] = await Order.create(
+        [
+          {
+            orderNumber,
+            user: userId,
+            items: orderItems,
+            status: 'delivered',
+            paymentStatus: 'paid',
+            paymentMethod: paymentAllocations[0]?.method?.toLowerCase() || 'cash',
+            shippingAddress: {
+              recipientName: customerName || 'Walk-in Customer',
+              phone: customerPhone || '+91 99000 88000',
+              addressLine1: 'POS Counter Sale - Walk-in Store',
+              addressLine2: 'Over-the-Counter Direct Delivery',
+              city: 'Store Counter',
+              state: 'In-Store',
+              postalCode: '600001',
+              country: 'India',
+            },
+            subTotal: calculation.subTotal,
+            taxAmount: calculation.taxAmount,
+            discountAmount: calculation.discountAmount,
+            deliveryFee: 0,
+            grandTotal: calculation.grandTotal,
+            statusHistory: [
+              {
+                status: 'pending',
+                notes: 'POS Counter Order created',
+                timestamp: new Date(),
+              },
+              {
+                status: 'confirmed',
+                notes: 'POS payment completed',
+                timestamp: new Date(),
+              },
+              {
+                status: 'delivered',
+                changedBy: userId,
+                notes: 'Billed and delivered over POS counter',
+                timestamp: new Date(),
+              },
+            ],
+            notes: [
+              {
+                text: `POS Billed Sale. Invoice #${invoiceNumber}`,
+                user: userId,
+                createdAt: new Date(),
+              },
+            ],
+          },
+        ],
+        { session }
+      );
+
+      // Save billing invoice linking to order
       const invoice = await Billing.create(
         [
           {
@@ -160,12 +240,18 @@ export const billingService = {
             changeReturned: calculation.changeReturned,
             notes,
             createdBy: userId,
+            order: order._id,
           },
         ],
         { session }
       );
 
-      return invoice[0];
+      const resObj = invoice[0].toObject ? invoice[0].toObject() : invoice[0];
+      resObj.orderId = order._id;
+      resObj.orderNumber = orderNumber;
+      resObj.orderStatus = 'delivered';
+
+      return resObj;
     });
   },
 };

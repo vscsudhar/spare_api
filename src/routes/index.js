@@ -24,6 +24,8 @@ import settingsRoutes from '../modules/settings/settings.routes.js';
 import notificationsRoutes from '../modules/notifications/notifications.routes.js';
 import uploadsRoutes from '../modules/uploads/uploads.routes.js';
 import dashboardRoutes from '../modules/dashboard/dashboard.routes.js';
+import supportTicketsRoutes from '../modules/support-tickets/support-tickets.routes.js';
+import returnsRoutes from '../modules/returns/returns.routes.js';
 
 const router = Router();
 
@@ -123,5 +125,7 @@ router.use('/reports', reportsRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/uploads', uploadsRoutes);
+router.use('/support-tickets', supportTicketsRoutes);
+router.use('/returns', returnsRoutes);
 
 export default router;

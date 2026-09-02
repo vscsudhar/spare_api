@@ -96,4 +96,5 @@ userSchema.pre(/^find/, function (next) {
 });
 
 export const Users = mongoose.models.Users || mongoose.model('Users', userSchema);
+if (!mongoose.models.User) mongoose.model('User', userSchema);
 export default Users;

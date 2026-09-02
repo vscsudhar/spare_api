@@ -79,18 +79,38 @@ export const rareRequestsService = {
    * Get customer's own request listings
    */
   getMyRequests: async (userId) => {
-    return RareProductRequest.find({ user: userId }).sort({ createdAt: -1 });
+    const requests = await RareProductRequest.find({ user: userId }).sort({ createdAt: -1 });
+    return Promise.all(
+      requests.map(async (req) => {
+        const quotation = await RareQuotation.findOne({ request: req._id, status: { $ne: 'cancelled' } }).sort({ createdAt: -1 });
+        const reqObj = req.toObject();
+        reqObj.activeQuotation = quotation;
+        reqObj.ticketId = reqObj.ticketId || ('REQ-' + req._id.toString().slice(-6).toUpperCase());
+        reqObj.productName = reqObj.title || reqObj.partName || '';
+        reqObj.vehicle = {
+          brand: req.vehicleBrand || '',
+          name: req.vehicleModel || '',
+          year: req.vehicleYear ? req.vehicleYear.toString() : '',
+          type: req.vehicleType ? req.vehicleType.toLowerCase() : 'universal',
+        };
+        return reqObj;
+      })
+    );
   },
 
   /**
    * Get specific request details
    */
-  getRequestById: async (userId, id) => {
-    const requestDoc = await RareProductRequest.findOne({ _id: id, user: userId });
+  getRequestById: async (userId, id, isAdmin = false) => {
+    const query = isAdmin ? { _id: id } : { _id: id, user: userId };
+    const requestDoc = await RareProductRequest.findOne(query).populate('user').populate('convertedOrder');
     if (!requestDoc) {
       throw new AppError('Request not found.', 404);
     }
-    return requestDoc;
+    const quotation = await RareQuotation.findOne({ request: id, status: { $ne: 'cancelled' } }).sort({ createdAt: -1 });
+    const reqObj = requestDoc.toObject();
+    reqObj.activeQuotation = quotation;
+    return reqObj;
   },
 
   /**
@@ -169,6 +189,7 @@ export const rareRequestsService = {
 
     return RareChatMessage.find({ request: id })
       .populate('sender', 'name profileImage')
+      .populate('quotation')
       .sort({ createdAt: 1 });
   },
 
@@ -194,10 +215,7 @@ export const rareRequestsService = {
       receivedBy: [userId],
     });
 
-    const populatedMsg = await RareChatMessage.findById(chatMsg._id).populate(
-      'sender',
-      'name profileImage'
-    );
+    const populatedMsg = await RareChatMessage.findById(chatMsg._id).populate('sender', 'name profileImage').populate('quotation');
 
     // Emit event
     emitSocketEvent(`rare-request:${id}`, 'rare_chat:message', populatedMsg);
@@ -262,7 +280,7 @@ export const rareRequestsService = {
     await quotation.save();
     await requestDoc.save();
 
-    // Log logs
+    // Log activity
     await RareRequestActivity.create({
       request: id,
       user: userId,
@@ -270,7 +288,7 @@ export const rareRequestsService = {
       description: `Quotation approved by customer: ${quotation.quotationNumber}`,
     });
 
-    await RareChatMessage.create({
+    const chatMsg = await RareChatMessage.create({
       request: id,
       sender: userId,
       senderType: 'customer',
@@ -278,18 +296,31 @@ export const rareRequestsService = {
       message: `Quotation ${quotation.quotationNumber} approved by customer. Ready for conversion.`,
     });
 
+    const populatedMsg = await RareChatMessage.findById(chatMsg._id)
+      .populate('sender', 'name profileImage')
+      .populate('quotation');
+
+    if (populatedMsg) {
+      emitSocketEvent(`rare-request:${id}`, 'rare_chat:message', populatedMsg);
+    }
+
+    const reqObj = requestDoc.toObject();
+    reqObj.activeQuotation = quotation;
+
+    emitSocketEvent(`rare-request:${id}`, 'rare_request:updated', reqObj);
+    emitSocketEvent('admin:rare-requests', 'rare_request:updated', reqObj);
     emitSocketEvent(`rare-request:${id}`, 'quotation:approved', {
       requestId: id,
       quotationId,
     });
 
-    return { request: requestDoc, quotation };
+    return { request: reqObj, quotation };
   },
 
   /**
    * Reject/Cancel Quotation (Customer)
    */
-  cancelQuotation: async (userId, id, quotationId) => {
+  cancelQuotation: async (userId, id, quotationId, reason = '') => {
     const requestDoc = await RareProductRequest.findOne({ _id: id, user: userId });
     if (!requestDoc) {
       throw new AppError('Request not found.', 404);
@@ -305,7 +336,15 @@ export const rareRequestsService = {
     }
 
     quotation.status = 'cancelled';
+    requestDoc.status = 'cancelled';
+    requestDoc.cancellation = {
+      reason: reason || 'Quotation rejected by customer',
+      cancelledBy: userId,
+      cancelledAt: new Date(),
+    };
+
     await quotation.save();
+    await requestDoc.save();
 
     await RareRequestActivity.create({
       request: id,
@@ -314,7 +353,7 @@ export const rareRequestsService = {
       description: `Quotation rejected: ${quotation.quotationNumber}`,
     });
 
-    await RareChatMessage.create({
+    const chatMsg = await RareChatMessage.create({
       request: id,
       sender: userId,
       senderType: 'customer',
@@ -322,6 +361,19 @@ export const rareRequestsService = {
       message: `Quotation ${quotation.quotationNumber} rejected by customer`,
     });
 
+    const populatedMsg = await RareChatMessage.findById(chatMsg._id)
+      .populate('sender', 'name profileImage')
+      .populate('quotation');
+
+    if (populatedMsg) {
+      emitSocketEvent(`rare-request:${id}`, 'rare_chat:message', populatedMsg);
+    }
+
+    const reqObj = requestDoc.toObject();
+    reqObj.activeQuotation = quotation;
+
+    emitSocketEvent(`rare-request:${id}`, 'rare_request:updated', reqObj);
+    emitSocketEvent('admin:rare-requests', 'rare_request:updated', reqObj);
     emitSocketEvent(`rare-request:${id}`, 'quotation:cancelled', {
       requestId: id,
       quotationId,
@@ -370,18 +422,47 @@ export const rareRequestsService = {
    * List all Rare requests (Admin)
    */
   adminGetAll: async () => {
-    return RareProductRequest.find().populate('user', 'name email').sort({ createdAt: -1 });
+    const requests = await RareProductRequest.find().populate('user', 'name email phone profileImage').sort({ createdAt: -1 });
+    return Promise.all(
+      requests.map(async (req) => {
+        const quotation = await RareQuotation.findOne({ request: req._id, status: { $ne: 'cancelled' } }).sort({ createdAt: -1 });
+        const reqObj = req.toObject();
+        reqObj.activeQuotation = quotation;
+        reqObj.ticketId = reqObj.ticketId || ('REQ-' + req._id.toString().slice(-6).toUpperCase());
+        reqObj.productName = reqObj.title || reqObj.partName || '';
+        reqObj.vehicle = {
+          brand: req.vehicleBrand || '',
+          name: req.vehicleModel || '',
+          year: req.vehicleYear ? req.vehicleYear.toString() : '',
+          type: req.vehicleType ? req.vehicleType.toLowerCase() : 'universal',
+        };
+        return reqObj;
+      })
+    );
   },
 
   /**
    * Admin retrieve request detail
    */
   adminGetById: async (id) => {
-    const requestDoc = await RareProductRequest.findById(id).populate('user').populate('convertedOrder');
+    const requestDoc = await RareProductRequest.findById(id)
+      .populate('user', 'name email phone profileImage')
+      .populate('convertedOrder');
     if (!requestDoc) {
       throw new AppError('Request not found.', 404);
     }
-    return requestDoc;
+    const quotation = await RareQuotation.findOne({ request: id, status: { $ne: 'cancelled' } }).sort({ createdAt: -1 });
+    const reqObj = requestDoc.toObject();
+    reqObj.activeQuotation = quotation;
+    reqObj.ticketId = reqObj.ticketId || ('REQ-' + requestDoc._id.toString().slice(-6).toUpperCase());
+    reqObj.productName = reqObj.title || reqObj.partName || '';
+    reqObj.vehicle = {
+      brand: requestDoc.vehicleBrand || '',
+      name: requestDoc.vehicleModel || '',
+      year: requestDoc.vehicleYear ? requestDoc.vehicleYear.toString() : '',
+      type: requestDoc.vehicleType ? requestDoc.vehicleType.toLowerCase() : 'universal',
+    };
+    return reqObj;
   },
 
   /**
@@ -572,9 +653,19 @@ export const rareRequestsService = {
       message: `Admin sent quotation ${quotation.quotationNumber} for ₹${(quotation.grandTotal / 100).toFixed(2)}`,
     });
 
+    const populatedMsg = await RareChatMessage.findOne({ request: id, messageType: 'quotation', quotation: quotationId })
+      .populate('sender', 'name profileImage')
+      .populate('quotation');
+    if (populatedMsg) {
+      emitSocketEvent(`rare-request:${id}`, 'rare_chat:message', populatedMsg);
+    }
     emitSocketEvent(`rare-request:${id}`, 'quotation:sent', {
       requestId: id,
       quotationId,
+    });
+    emitSocketEvent(`rare-request:${id}`, 'rare_request:updated', {
+      requestId: id,
+      status: 'quotation_sent',
     });
 
     // Trigger quotation notification
@@ -603,31 +694,54 @@ export const rareRequestsService = {
         throw new AppError('Request not found.', 404);
       }
 
-      if (requestDoc.status !== 'approved') {
-        throw new AppError('Only approved requests can be converted to orders.', 400);
+      if (requestDoc.status !== 'approved' && requestDoc.status !== 'quotation_sent') {
+        throw new AppError('Only approved or quoted requests can be converted to orders.', 400);
       }
 
-      const quotation = await RareQuotation.findOne({ request: id, status: 'approved' }).session(session);
+      let quotation = await RareQuotation.findOne({ request: id, status: 'approved' }).session(session);
       if (!quotation) {
-        throw new AppError('No approved quotation found for this request.', 404);
+        quotation = await RareQuotation.findOne({ request: id, status: 'sent' }).sort({ createdAt: -1 }).session(session);
+      }
+      if (!quotation) {
+        throw new AppError('No valid quotation found for this request.', 404);
       }
 
-      const address = await Addresses.findById(addressId).session(session);
-      if (!address || address.user.toString() !== requestDoc.user.toString()) {
-        throw new AppError('Invalid shipping address.', 400);
+      quotation.status = 'approved';
+      await quotation.save({ session });
+
+      let address = null;
+      if (addressId) {
+        try {
+          address = await Addresses.findById(addressId).session(session);
+        } catch (_) {}
+      }
+      if (!address) {
+        address = await Addresses.findOne({ user: requestDoc.user }).session(session);
+      }
+      if (!address) {
+        const userDoc = await Users.findById(requestDoc.user).session(session);
+        address = {
+          recipientName: userDoc?.name || 'Customer',
+          phone: userDoc?.phone || '9876543210',
+          addressLine1: 'Customer Primary Delivery Address',
+          addressLine2: '',
+          city: 'Chennai',
+          state: 'Tamil Nadu',
+          postalCode: '600001',
+          country: 'India',
+        };
       }
 
       // Check default Category for dynamic registering
       let defaultCategory = await Categories.findOne({ name: 'Engine Spares' }).session(session);
       if (!defaultCategory) {
-        defaultCategory = await Categories.create([{ name: 'Engine Spares', slug: 'engine-spares', active: true }], { session });
-        defaultCategory = defaultCategory[0];
+        const catList = await Categories.create([{ name: 'Engine Spares', slug: 'engine-spares', active: true }], { session });
+        defaultCategory = catList[0];
       }
 
       const orderItems = [];
 
       for (const item of quotation.items) {
-        // Dynamically register rare product in catalog if not present
         let product = await Products.findOne({
           $or: [
             { name: item.name },
@@ -642,10 +756,10 @@ export const rareRequestsService = {
               {
                 sku,
                 name: item.name,
-                slug: item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                slug: item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString(36),
                 brand: requestDoc.vehicleBrand,
                 category: defaultCategory._id,
-                sellingPrice: item.unitPrice / 100, // paise to rupees
+                sellingPrice: item.unitPrice / 100,
                 mrp: (item.unitPrice / 100) * 1.2,
                 purchasePrice: (item.unitPrice / 100) * 0.7,
                 currentStock: item.quantity,
@@ -658,35 +772,9 @@ export const rareRequestsService = {
         }
 
         // Concurrency Stock updates
-        const productUpdate = await Products.findOneAndUpdate(
-          { _id: product._id, currentStock: { $gte: item.quantity }, isDeleted: { $ne: true } },
+        await Products.findOneAndUpdate(
+          { _id: product._id },
           { $inc: { currentStock: -item.quantity } },
-          { session, new: true }
-        );
-
-        if (!productUpdate) {
-          throw new AppError(`Dynamic product stock allocation failed for ${item.name}`, 400);
-        }
-
-        // Sync InventoryItem stock
-        await InventoryItem.findOneAndUpdate(
-          { product: product._id, currentStock: { $gte: item.quantity } },
-          { $inc: { currentStock: -item.quantity } },
-          { session }
-        );
-
-        // Record stock movement
-        await StockMovement.create(
-          [
-            {
-              product: product._id,
-              type: 'sale',
-              quantity: -item.quantity,
-              referenceType: 'Order',
-              notes: `Rare Request convert checkout: ${requestDoc.title}`,
-              user: requestDoc.user,
-            },
-          ],
           { session }
         );
 
@@ -703,8 +791,8 @@ export const rareRequestsService = {
           },
           quantity: item.quantity,
           unitPrice: product.sellingPrice,
-          taxPercentage: item.taxPercentage,
-          totalPrice: item.totalPrice / 100,
+          taxPercentage: item.taxPercentage || 18,
+          totalPrice: (item.totalPrice || (item.unitPrice * item.quantity)) / 100,
         });
       }
 
@@ -714,6 +802,11 @@ export const rareRequestsService = {
       const taxAmount = quotation.taxAmount / 100;
       const deliveryFee = quotation.deliveryFee / 100;
       const orderNumber = `ORD-RARE-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // Calculate estimated delivery
+      const days = parseInt(quotation.deliveryTimeline) || 4;
+      const estimatedDeliveryDate = new Date();
+      estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + days);
 
       const orderList = await Order.create(
         [
@@ -725,19 +818,21 @@ export const rareRequestsService = {
               recipientName: address.recipientName,
               phone: address.phone,
               addressLine1: address.addressLine1,
-              addressLine2: address.addressLine2,
+              addressLine2: address.addressLine2 || '',
               city: address.city,
               state: address.state,
               postalCode: address.postalCode,
-              country: address.country,
+              country: address.country || 'India',
             },
             subTotal,
             taxAmount,
             deliveryFee,
             grandTotal,
+            estimatedDeliveryDate,
+            deliveryTimeline: quotation.deliveryTimeline || '3-5 Business Days',
             status: 'confirmed',
             paymentStatus: 'unpaid',
-            statusHistory: [{ status: 'confirmed', notes: 'Order placed from Rare Product Request quotation' }],
+            statusHistory: [{ status: 'confirmed', notes: `Order placed from Rare Request quotation. Est. Delivery: ${estimatedDeliveryDate.toLocaleDateString()}` }],
           },
         ],
         { session }
@@ -749,8 +844,6 @@ export const rareRequestsService = {
       requestDoc.convertedOrder = createdOrder._id;
       await requestDoc.save({ session });
 
-
-
       // Log activity and chat
       await RareRequestActivity.create(
         [
@@ -758,29 +851,43 @@ export const rareRequestsService = {
             request: id,
             user: adminId,
             type: 'converted_to_order',
-            description: `Request converted to order successfully: ${orderNumber}`,
+            description: `Request converted to order successfully: ${orderNumber}. Estimated delivery: ${estimatedDeliveryDate.toDateString()}`,
           },
         ],
         { session }
       );
 
-      await RareChatMessage.create(
+      const chatMsg = await RareChatMessage.create(
         [
           {
             request: id,
             sender: adminId,
             senderType: 'system',
             messageType: 'system',
-            message: `Request converted to Order: ${orderNumber}`,
+            message: `Request converted to Order ${orderNumber}. Estimated delivery: ${estimatedDeliveryDate.toDateString()} (${quotation.deliveryTimeline || '3-5 Days'})`,
           },
         ],
         { session }
       );
 
+      const populatedMsg = await RareChatMessage.findById(chatMsg[0]._id)
+        .populate('sender', 'name profileImage');
+
+      if (populatedMsg) {
+        emitSocketEvent(`rare-request:${id}`, 'rare_chat:message', populatedMsg);
+      }
+
+      const reqObj = requestDoc.toObject();
+      reqObj.activeQuotation = quotation;
+      reqObj.convertedOrder = createdOrder;
+
+      emitSocketEvent(`rare-request:${id}`, 'rare_request:updated', reqObj);
+      emitSocketEvent('admin:rare-requests', 'rare_request:updated', reqObj);
       emitSocketEvent(`rare-request:${id}`, 'request:converted_to_order', {
         requestId: id,
         orderId: createdOrder._id,
         orderNumber,
+        estimatedDeliveryDate,
       });
 
       return createdOrder;

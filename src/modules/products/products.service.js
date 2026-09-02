@@ -1,3 +1,4 @@
+import Wishlist from '../wishlist/wishlist.model.js';
 ﻿import AppError from '../../errors/AppError.js';
 import Products from './products.model.js';
 import Categories from '../categories/categories.model.js';
@@ -16,7 +17,7 @@ export const productsService = {
   /**
    * Get all products with pagination, search, sorting, and filters
    */
-  getAll: async (queryParams = {}) => {
+  getAll: async (queryParams = {}, userId = null) => {
     const page = parseInt(queryParams.page, 10) || 1;
     const limit = parseInt(queryParams.limit, 10) || 10;
     const skip = (page - 1) * limit;
@@ -119,8 +120,29 @@ export const productsService = {
 
     const total = await Products.countDocuments(queryObj);
 
+    let formattedProducts = products;
+    if (userId) {
+      const wishlist = await Wishlist.findOne({ user: userId });
+      const wishlistedSet = new Set((wishlist?.products || []).map((id) => id.toString()));
+      formattedProducts = products.map((p) => {
+        const obj = p.toObject ? p.toObject() : { ...p };
+        return {
+          ...obj,
+          isWishlist: wishlistedSet.has(p._id.toString()),
+        };
+      });
+    } else {
+      formattedProducts = products.map((p) => {
+        const obj = p.toObject ? p.toObject() : { ...p };
+        return {
+          ...obj,
+          isWishlist: false,
+        };
+      });
+    }
+
     return {
-      products,
+      products: formattedProducts,
       pagination: {
         total,
         page,
@@ -133,7 +155,7 @@ export const productsService = {
   /**
    * Get Product by ID
    */
-  getById: async (id) => {
+  getById: async (id, userId = null) => {
     const product = await Products.findById(id)
       .populate('category')
       .populate('vehicleType')
@@ -143,7 +165,17 @@ export const productsService = {
     if (!product) {
       throw new AppError('Product not found.', 404);
     }
-    return product;
+    let isWishlist = false;
+    if (userId) {
+      const wishlist = await Wishlist.findOne({ user: userId });
+      isWishlist = (wishlist?.products || []).some((pId) => pId.toString() === product._id.toString());
+    }
+    const productObj = product.toObject ? product.toObject() : { ...product };
+    productObj.compatibleVehicles = productObj.compatibilities || [];
+    return {
+      ...productObj,
+      isWishlist,
+    };
   },
 
   /**
@@ -151,6 +183,29 @@ export const productsService = {
    */
   create: async (data) => {
     const slug = slugify(data.name);
+
+
+    // Normalize compatibleVehicles to compatibilities
+    if (data.compatibleVehicles !== undefined && (!data.compatibilities || data.compatibilities.length === 0)) {
+      data.compatibilities = data.compatibleVehicles;
+    }
+
+    if (data.fitType === 'universal') {
+      data.compatibilities = [];
+    } else if (data.compatibilities && data.compatibilities.length > 0) {
+      for (const comp of data.compatibilities) {
+        if (!comp.brand || !comp.model) {
+          throw new AppError('Brand and Model are required for each compatible vehicle.', 400);
+        }
+        const modelDoc = await VehicleModel.findById(comp.model);
+        if (!modelDoc) {
+          throw new AppError(`Vehicle model with ID ${comp.model} not found.`, 400);
+        }
+        if (modelDoc.brand.toString() !== comp.brand.toString()) {
+          throw new AppError(`Vehicle model '${modelDoc.name}' does not belong to the selected brand.`, 400);
+        }
+      }
+    }
 
     // Ensure unique SKU & Slug
     const skuExists = await Products.findOne({ sku: data.sku, includeDeleted: true });
@@ -218,9 +273,35 @@ export const productsService = {
       product.category = data.category;
     }
 
+
+    // Normalize compatibleVehicles to compatibilities
+    if (data.compatibleVehicles !== undefined && (!data.compatibilities || data.compatibilities.length === 0)) {
+      data.compatibilities = data.compatibleVehicles;
+    }
+
+    if (data.fitType === 'universal') {
+      data.compatibilities = [];
+    } else if (data.compatibilities && data.compatibilities.length > 0) {
+      for (const comp of data.compatibilities) {
+        if (!comp.brand || !comp.model) {
+          throw new AppError('Brand and Model are required for each compatible vehicle.', 400);
+        }
+        const modelDoc = await VehicleModel.findById(comp.model);
+        if (!modelDoc) {
+          throw new AppError(`Vehicle model with ID ${comp.model} not found.`, 400);
+        }
+        if (modelDoc.brand.toString() !== comp.brand.toString()) {
+          throw new AppError(`Vehicle model '${modelDoc.name}' does not belong to the selected brand.`, 400);
+        }
+      }
+    }
+
+
     // Set other fields directly
     const directFields = [
       'description',
+      'fitType',
+      'stockManaged',
       'brand',
       'vehicleType',
       'compatibilities',
@@ -359,8 +440,8 @@ export const productsService = {
   /**
    * Retrieve vehicle models list
    */
-  getVehicleModels: async () => {
-    return VehicleModel.find().populate('brand');
+  getVehicleModels: async (filter = {}) => {
+    return VehicleModel.find(filter).populate('brand');
   },
 
   createVehicleModel: async (name, brandId, type, years) => {

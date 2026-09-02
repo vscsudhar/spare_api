@@ -15,7 +15,7 @@ const startServer = async () => {
 
   // 3. Start Listening
   const port = env.PORT || 5000;
-  server = app.listen(port, () => {
+  server = app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Server listening on port ${port} in ${env.NODE_ENV} mode`);
   });
 

@@ -2,6 +2,18 @@ import rareRequestsService from './rare-requests.service.js';
 import sendResponse from '../../utils/response.js';
 import catchAsync from '../../utils/catchAsync.js';
 
+const isStaffOrAdminUser = (req) => {
+  return Boolean(
+    req.isOwner ||
+      (req.permissions &&
+        (req.permissions.includes('rare_requests.read') ||
+          req.permissions.includes('rare_requests.reply'))) ||
+      req.user?.role?.name === 'admin' ||
+      req.user?.role?.name === 'owner' ||
+      req.user?.role?.name === 'staff'
+  );
+};
+
 export class RareRequestsController {
   createRequest = catchAsync(async (req, res) => {
     const data = await rareRequestsService.createRequest(req.user._id, req.body);
@@ -14,7 +26,8 @@ export class RareRequestsController {
   });
 
   getRequestById = catchAsync(async (req, res) => {
-    const data = await rareRequestsService.getRequestById(req.user._id, req.params.id);
+    const isAdmin = isStaffOrAdminUser(req);
+    const data = await rareRequestsService.getRequestById(req.user._id, req.params.id, isAdmin);
     return sendResponse(res, 200, 'Request details retrieved successfully', data);
   });
 
@@ -24,23 +37,27 @@ export class RareRequestsController {
   });
 
   addRequestImages = catchAsync(async (req, res) => {
-    const data = await rareRequestsService.addRequestImages(req.user._id, req.params.id, req.files || []);
+    const isAdmin = isStaffOrAdminUser(req);
+    const data = await rareRequestsService.addRequestImages(req.user._id, req.params.id, req.files || [], isAdmin);
     return sendResponse(res, 200, 'Images uploaded and attached successfully', data);
   });
 
   getChatMessages = catchAsync(async (req, res) => {
-    const data = await rareRequestsService.getChatMessages(req.user._id, req.params.id);
+    const isAdmin = isStaffOrAdminUser(req);
+    const data = await rareRequestsService.getChatMessages(req.user._id, req.params.id, isAdmin);
     return sendResponse(res, 200, 'Chat messages retrieved successfully', data);
   });
 
   sendChatMessage = catchAsync(async (req, res) => {
     const { message } = req.body;
-    const data = await rareRequestsService.sendChatMessage(req.user._id, req.params.id, message);
+    const isAdmin = isStaffOrAdminUser(req);
+    const data = await rareRequestsService.sendChatMessage(req.user._id, req.params.id, message, isAdmin);
     return sendResponse(res, 201, 'Message sent successfully', data);
   });
 
   getQuotations = catchAsync(async (req, res) => {
-    const data = await rareRequestsService.getQuotations(req.user._id, req.params.id);
+    const isAdmin = isStaffOrAdminUser(req);
+    const data = await rareRequestsService.getQuotations(req.user._id, req.params.id, isAdmin);
     return sendResponse(res, 200, 'Quotations retrieved successfully', data);
   });
 
@@ -50,7 +67,8 @@ export class RareRequestsController {
   });
 
   cancelQuotation = catchAsync(async (req, res) => {
-    const data = await rareRequestsService.cancelQuotation(req.user._id, req.params.id, req.params.quotationId);
+    const { reason } = req.body || {};
+    const data = await rareRequestsService.cancelQuotation(req.user._id, req.params.id, req.params.quotationId, reason);
     return sendResponse(res, 200, 'Quotation cancelled successfully', data);
   });
 

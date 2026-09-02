@@ -19,7 +19,7 @@ const billingSchema = new mongoose.Schema(
       {
         product: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: 'Product',
+          ref: 'Products',
           required: true,
         },
         name: {
@@ -83,8 +83,12 @@ const billingSchema = new mongoose.Schema(
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Users',
       required: true,
+    },
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
     },
   },
   {

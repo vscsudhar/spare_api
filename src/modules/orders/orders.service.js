@@ -297,7 +297,7 @@ export const ordersService = {
    * Get logged-in user order listings
    */
   getMyOrders: async (userId) => {
-    return Order.find({ user: userId }).sort({ createdAt: -1 });
+    return Order.find({ user: userId }).populate('items.product').sort({ createdAt: -1 });
   },
 
   /**

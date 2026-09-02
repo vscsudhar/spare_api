@@ -4,7 +4,7 @@ import catchAsync from '../../utils/catchAsync.js';
 
 export class ProductsController {
   getAll = catchAsync(async (req, res) => {
-    const { products, pagination } = await productsService.getAll(req.query);
+    const { products, pagination } = await productsService.getAll(req.query, req.user?._id);
     return sendResponse(res, 200, 'Products retrieved successfully', products, pagination);
   });
 
@@ -14,7 +14,7 @@ export class ProductsController {
   });
 
   getById = catchAsync(async (req, res) => {
-    const data = await productsService.getById(req.params.id);
+    const data = await productsService.getById(req.params.id, req.user?._id);
     return sendResponse(res, 200, 'Product retrieved successfully', data);
   });
 
@@ -47,7 +47,7 @@ export class ProductsController {
 
   getFeatured = catchAsync(async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 10;
-    const { products } = await productsService.getAll({ featured: true, limit, active: true });
+    const { products } = await productsService.getAll({ featured: true, limit, active: true }, req.user?._id);
     return sendResponse(res, 200, 'Featured products retrieved successfully', products);
   });
 
@@ -58,7 +58,7 @@ export class ProductsController {
       active: true,
       page: req.query.page,
       limit: req.query.limit,
-    });
+    }, req.user?._id);
     return sendResponse(res, 200, 'Search completed successfully', products, pagination);
   });
 
@@ -81,7 +81,12 @@ export class ProductsController {
   });
 
   getVehicleModels = catchAsync(async (req, res) => {
-    const data = await productsService.getVehicleModels();
+    const filter = {};
+    const brandId = req.query.brandId || req.query.brand;
+    if (brandId) {
+      filter.brand = brandId;
+    }
+    const data = await productsService.getVehicleModels(filter);
     return sendResponse(res, 200, 'Vehicle models retrieved successfully', data);
   });
 

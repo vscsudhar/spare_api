@@ -90,6 +90,15 @@ const productsSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'VehicleType',
     },
+    fitType: {
+      type: String,
+      enum: ['vehicle_specific', 'universal'],
+      default: 'vehicle_specific',
+    },
+    stockManaged: {
+      type: Boolean,
+      default: true,
+    },
     compatibilities: [productCompatibilitySchema],
     oemPartNumbers: [
       {
@@ -200,4 +209,5 @@ productsSchema.pre(/^find/, function (next) {
 });
 
 export const Products = mongoose.models.Products || mongoose.model('Products', productsSchema);
+if (!mongoose.models.Product) mongoose.model('Product', productsSchema);
 export default Products;
