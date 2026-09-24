@@ -30,6 +30,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    locationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Location',
+      default: null,
+    },
+    shift: {
+      type: String,
+      default: '09:00 AM - 06:00 PM',
+    },
     role: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Role',

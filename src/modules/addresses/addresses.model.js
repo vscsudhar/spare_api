@@ -57,6 +57,28 @@ const addressesSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+    },
+    locationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Location',
+      default: null,
+    },
+    locationName: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    distanceFromLocationKm: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -65,6 +87,7 @@ const addressesSchema = new mongoose.Schema(
 
 // Indexes
 addressesSchema.index({ user: 1 });
+addressesSchema.index({ locationId: 1 });
 
 export const Addresses = mongoose.models.Addresses || mongoose.model('Addresses', addressesSchema);
 export default Addresses;

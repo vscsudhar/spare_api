@@ -1,3 +1,4 @@
+import deliveryChargesService from '../delivery-charges/delivery-charges.service.js';
 import AppError from '../../errors/AppError.js';
 import Order from './orders.model.js';
 import Cart from '../cart/cart.model.js';
@@ -60,7 +61,7 @@ export const ordersService = {
       }
     }
 
-    const deliveryFee = subTotal >= 1000 ? 0 : 100;
+    const deliveryFee = await deliveryChargesService.calculateFee(subTotal, address?.locationId || null);
     const grandTotal = subTotal + taxAmount + deliveryFee - discountAmount;
 
     return {
@@ -106,26 +107,25 @@ export const ordersService = {
         throw new AppError('Shipping address not found.', 404);
       }
 
-      // 4. Calculate Server-side pricing & Snapshots list
+      // 4. Calculate Server-side pricing & Snapshots list for available / fulfillable items
       let subTotal = 0;
       let taxAmount = 0;
       const orderItems = [];
+      const fulfillableItems = [];
 
       for (const item of cart.items) {
         const product = await Products.findById(item.product._id).session(session);
-        if (!product || product.isDeleted) {
-          throw new AppError('One of the products in your cart is no longer available.', 400);
-        }
-        if (!product.active) {
-          throw new AppError(`Product ${product.name} is currently inactive.`, 400);
+        if (!product || product.isDeleted || !product.active) {
+          continue;
         }
 
-        // Concurrency Stock Validation (Atomic)
-        if (product.currentStock < item.quantity) {
-          throw new AppError(
-            `Insufficient stock for ${product.name}. Available: ${product.currentStock}, requested: ${item.quantity}`,
-            400
-          );
+        // Check if product is strictly stock-managed and out of stock
+        const isStockManaged = product.stockManaged !== false;
+        const availableStock = product.currentStock ?? 0;
+
+        if (isStockManaged && availableStock < item.quantity) {
+          // Strictly out of stock: Skip this item so remaining available items can still be ordered
+          continue;
         }
 
         const lineSubTotal = item.quantity * product.sellingPrice;
@@ -151,6 +151,19 @@ export const ordersService = {
           taxPercentage: product.taxPercentage || 18,
           totalPrice: lineTotal,
         });
+
+        fulfillableItems.push({
+          item,
+          productDoc: product,
+          isStockManaged,
+        });
+      }
+
+      if (orderItems.length === 0) {
+        throw new AppError(
+          'All items in your cart are currently out of stock or unavailable.',
+          400
+        );
       }
 
       // 5. Apply Coupon
@@ -174,59 +187,71 @@ export const ordersService = {
         }
       }
 
-      const deliveryFee = subTotal >= 1000 ? 0 : 100;
+      const deliveryFee = await deliveryChargesService.calculateFee(subTotal, address?.locationId || null);
       const grandTotal = subTotal + taxAmount + deliveryFee - discountAmount;
       const orderNumber = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
 
-      // 6. Deduct Stock Levels atomically inside Session to prevent double spending
-      for (const item of cart.items) {
-        // Atomic product update ensures stock currentStock >= quantity
-        const productUpdate = await Products.findOneAndUpdate(
-          {
-            _id: item.product._id,
-            currentStock: { $gte: item.quantity },
-            isDeleted: { $ne: true },
-          },
-          { $inc: { currentStock: -item.quantity } },
-          { session, new: true }
-        );
+      // 6. Deduct Stock Levels atomically inside Session for fulfilled items
+      for (const fItem of fulfillableItems) {
+        const { item, productDoc, isStockManaged } = fItem;
 
-        if (!productUpdate) {
-          throw new AppError(
-            `Stock conflict for product: ${item.product.name}. Inventory allocation failed.`,
-            400
+        if (isStockManaged) {
+          const productUpdate = await Products.findOneAndUpdate(
+            {
+              _id: productDoc._id,
+              currentStock: { $gte: item.quantity },
+              isDeleted: { $ne: true },
+            },
+            { $inc: { currentStock: -item.quantity } },
+            { session, new: true }
           );
-        }
 
-        // Low stock warning trigger
-        const settings = (await Settings.findOne().session(session)) || {};
-        const threshold = settings.inventory?.lowStockThreshold ?? 10;
-        if (productUpdate.currentStock < threshold) {
-          try {
-            await notificationsService.createNotification(null, {
-              title: 'Low Stock Alert',
-              message: `Product "${productUpdate.name}" is running low on stock. Current level: ${productUpdate.currentStock}`,
-              type: 'low_stock',
-              referenceId: productUpdate._id,
-              referenceType: 'Product',
-            });
-          } catch (err) {
-            console.error('Failed to trigger low stock notification:', err);
+          if (!productUpdate) {
+            throw new AppError(
+              `Stock conflict for product: ${productDoc.name}. Inventory allocation failed.`,
+              400
+            );
+          }
+
+          // Low stock warning trigger
+          const settings = (await Settings.findOne().session(session)) || {};
+          const threshold = settings.inventory?.lowStockThreshold ?? 10;
+          if (productUpdate.currentStock < threshold) {
+            try {
+              await notificationsService.createNotification(null, {
+                title: 'Low Stock Alert',
+                message: `Product "${productUpdate.name}" is running low on stock. Current level: ${productUpdate.currentStock}`,
+                type: 'low_stock',
+                referenceId: productUpdate._id,
+                referenceType: 'Product',
+              });
+            } catch (err) {
+              console.error('Failed to trigger low stock notification:', err);
+            }
+          }
+
+          // Sync InventoryItem stock
+          await InventoryItem.findOneAndUpdate(
+            { product: productDoc._id, currentStock: { $gte: item.quantity } },
+            { $inc: { currentStock: -item.quantity } },
+            { session }
+          );
+        } else {
+          // On-demand / arrange product (stock not strictly managed)
+          if ((productDoc.currentStock ?? 0) > 0) {
+            await Products.findByIdAndUpdate(
+              productDoc._id,
+              { $inc: { currentStock: -Math.min(productDoc.currentStock, item.quantity) } },
+              { session }
+            );
           }
         }
-
-        // Sync InventoryItem stock
-        await InventoryItem.findOneAndUpdate(
-          { product: item.product._id, currentStock: { $gte: item.quantity } },
-          { $inc: { currentStock: -item.quantity } },
-          { session }
-        );
 
         // Record stock movements
         await StockMovement.create(
           [
             {
-              product: item.product._id,
+              product: productDoc._id,
               type: 'sale',
               quantity: -item.quantity,
               referenceType: 'Order',
@@ -238,7 +263,7 @@ export const ordersService = {
         );
       }
 
-      // 7. Save Address Snapshots
+      // 7. Save Address Snapshots with Coordinates and Location Hub Assignment
       const shippingAddress = {
         recipientName: address.recipientName,
         phone: address.phone,
@@ -248,9 +273,14 @@ export const ordersService = {
         state: address.state,
         postalCode: address.postalCode,
         country: address.country,
+        latitude: address.latitude ?? null,
+        longitude: address.longitude ?? null,
+        locationId: address.locationId ?? null,
+        locationName: address.locationName ?? null,
+        distanceFromLocationKm: address.distanceFromLocationKm ?? null,
       };
 
-      // 8. Place the Order doc
+      // 8. Place the Order doc assigned to the nearest Hub
       const order = await Order.create(
         [
           {
@@ -258,6 +288,9 @@ export const ordersService = {
             user: userId,
             items: orderItems,
             shippingAddress,
+            locationId: address.locationId ?? null,
+            locationName: address.locationName ?? null,
+            distanceFromLocationKm: address.distanceFromLocationKm ?? null,
             subTotal,
             taxAmount,
             discountAmount,
@@ -271,9 +304,16 @@ export const ordersService = {
         { session }
       );
 
-      // 9. Clear Cart purchased items
-      cart.items = [];
-      cart.coupon = null;
+      // 9. Remove fulfilled items from Cart (keep any out-of-stock items)
+      const orderedProductIds = new Set(
+        fulfillableItems.map((f) => f.productDoc._id.toString())
+      );
+      cart.items = cart.items.filter(
+        (ci) => !orderedProductIds.has(ci.product._id ? ci.product._id.toString() : ci.product.toString())
+      );
+      if (cart.items.length === 0) {
+        cart.coupon = null;
+      }
       await cart.save({ session });
 
       // Trigger new_order notification

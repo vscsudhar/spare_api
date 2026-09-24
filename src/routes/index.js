@@ -26,6 +26,8 @@ import uploadsRoutes from '../modules/uploads/uploads.routes.js';
 import dashboardRoutes from '../modules/dashboard/dashboard.routes.js';
 import supportTicketsRoutes from '../modules/support-tickets/support-tickets.routes.js';
 import returnsRoutes from '../modules/returns/returns.routes.js';
+import locationsRoutes from '../modules/locations/locations.routes.js';
+import deliveryChargesRoutes from '../modules/delivery-charges/delivery-charges.routes.js';
 
 const router = Router();
 
@@ -127,5 +129,8 @@ router.use('/notifications', notificationsRoutes);
 router.use('/uploads', uploadsRoutes);
 router.use('/support-tickets', supportTicketsRoutes);
 router.use('/returns', returnsRoutes);
+router.use('/admin/locations', locationsRoutes);
+router.use('/locations', locationsRoutes);
+router.use('/delivery-charges', deliveryChargesRoutes);
 
 export default router;

@@ -137,6 +137,28 @@ export const seedDatabase = async (disconnectAfter = false) => {
     } else {
       console.log(`👑 Owner Account already exists: ${ownerEmail}`);
     }
+
+    // Seed Admin Account
+    const adminEmail = 'admin@voltspare.com';
+    const adminExists = await Users.findOne({ email: adminEmail, includeDeleted: true });
+    if (!adminExists) {
+      const passwordHash = await bcrypt.hash('AdminPassword123!', 10);
+      await Users.create({
+        name: 'System Admin',
+        email: adminEmail,
+        phone: '+1234567899',
+        passwordHash,
+        role: rolesMap['admin'],
+        permissions: [],
+        status: 'active',
+        emailVerified: true,
+        phoneVerified: true,
+      });
+      console.log(`🛡️ Created Admin Account: ${adminEmail}`);
+    } else {
+      console.log(`🛡️ Admin Account already exists: ${adminEmail}`);
+    }
+
     // Seed Default Customer Account for Mobile App
     const customerEmail = 'customer.dash@test.com';
     const customerExists = await Users.findOne({ email: customerEmail, includeDeleted: true });
@@ -271,7 +293,7 @@ export const seedDatabase = async (disconnectAfter = false) => {
       if (!doc) {
         doc = await Products.create(prd);
         console.log(`📦 Seeded Product: ${prd.name}`);
-        
+
         // Log opening stock in Inventory
         await inventoryService.updateStock(
           doc._id,

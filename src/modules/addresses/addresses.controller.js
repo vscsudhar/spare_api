@@ -10,12 +10,18 @@ export class AddressesController {
 
   create = catchAsync(async (req, res) => {
     const data = await addressesService.create(req.user._id, req.body);
-    return sendResponse(res, 201, 'Address created successfully', data);
+    const message = data.serviceAvailable === false && data.latitude
+      ? 'Address saved, but no service hub is available nearby'
+      : 'Address saved successfully';
+    return sendResponse(res, 201, message, data);
   });
 
   update = catchAsync(async (req, res) => {
     const data = await addressesService.update(req.user._id, req.params.id, req.body);
-    return sendResponse(res, 200, 'Address updated successfully', data);
+    const message = data.serviceAvailable === false && data.latitude
+      ? 'Address saved, but no service hub is available nearby'
+      : 'Address updated successfully';
+    return sendResponse(res, 200, message, data);
   });
 
   delete = catchAsync(async (req, res) => {

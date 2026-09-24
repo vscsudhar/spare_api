@@ -4,7 +4,7 @@ import catchAsync from '../../utils/catchAsync.js';
 
 export class UsersController {
   getAllStaff = catchAsync(async (req, res) => {
-    const data = await usersService.getAllStaff();
+    const data = await usersService.getAllStaff(req.query);
     return sendResponse(res, 200, 'Staff retrieved successfully', data);
   });
 

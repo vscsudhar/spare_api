@@ -93,75 +93,49 @@ export const initSocket = (server) => {
       console.log(`👑 Admin joined room 'admin:rare-requests'`);
     }
 
-    // Compatibility room:join and room:leave
+    // Generic room join handler supporting room:join and join_request
     socket.on('room:join', async (payload, callback) => {
       try {
-        let { roomId, requestId } = payload || {};
-        if (roomId && roomId.startsWith('rare-request:')) {
-          requestId = roomId.split(':')[1];
+        let roomId = typeof payload === 'string' ? payload : (payload?.roomId || (payload?.requestId ? `rare-request:${payload.requestId}` : ''));
+        if (!roomId) {
+          throw new Error('Invalid room parameter');
         }
-        if (!requestId || !/^[0-9a-fA-F]{24}$/.test(requestId)) {
-          throw new Error('Invalid Request ID');
-        }
-        const requestDoc = await RareProductRequest.findById(requestId);
-        if (!requestDoc) {
-          throw new Error('Request not found');
-        }
-        const isOwner = requestDoc.user.toString() === user._id.toString();
-        if (!isOwner && !isUserAdmin) {
-          throw new Error('Access denied');
-        }
-        socket.join(`rare-request:${requestId}`);
-        console.log(`💬 Joined rare-request room (compat): rare-request:${requestId}`);
-        if (callback) {
-          callback({ success: true, message: `Successfully joined room rare-request:${requestId}` });
+
+        socket.join(roomId);
+        console.log(`💬 Socket [${user.name}] (${user._id}) joined room: ${roomId}`);
+        if (typeof callback === 'function') {
+          callback({ success: true, message: `Successfully joined room ${roomId}` });
         }
       } catch (err) {
-        if (callback) {
+        console.error('Socket room:join error:', err.message);
+        if (typeof callback === 'function') {
           callback({ success: false, message: err.message });
         }
       }
     });
 
     socket.on('room:leave', (payload, callback) => {
-      let { roomId, requestId } = payload || {};
-      if (roomId && roomId.startsWith('rare-request:')) {
-        requestId = roomId.split(':')[1];
-      }
-      if (requestId) {
-        socket.leave(`rare-request:${requestId}`);
-        console.log(`💬 Left rare-request room (compat): rare-request:${requestId}`);
-        if (callback) callback({ success: true });
+      let roomId = typeof payload === 'string' ? payload : (payload?.roomId || (payload?.requestId ? `rare-request:${payload.requestId}` : ''));
+      if (roomId) {
+        socket.leave(roomId);
+        console.log(`💬 Socket [${user.name}] (${user._id}) left room: ${roomId}`);
+        if (typeof callback === 'function') callback({ success: true });
       }
     });
 
-    // 3. Handle request room join request with authentication checks
+    // Handle legacy request room join
     socket.on('join_request', async (payload, callback) => {
       try {
         const { requestId } = payload || {};
-        if (!requestId || !/^[0-9a-fA-F]{24}$/.test(requestId)) {
-          throw new Error('Invalid Request ID');
+        if (requestId) {
+          socket.join(`rare-request:${requestId}`);
+          console.log(`💬 Socket [${user.name}] joined rare-request room: rare-request:${requestId}`);
         }
-
-        const requestDoc = await RareProductRequest.findById(requestId);
-        if (!requestDoc) {
-          throw new Error('Request not found');
-        }
-
-        // Room access checks
-        const isOwner = requestDoc.user.toString() === user._id.toString();
-        if (!isOwner && !isUserAdmin) {
-          throw new Error('Access denied. Customer can only access their own requests.');
-        }
-
-        socket.join(`rare-request:${requestId}`);
-        console.log(`💬 Joined rare-request room: rare-request:${requestId}`);
-
-        if (callback) {
+        if (typeof callback === 'function') {
           callback({ success: true, message: `Successfully joined room rare-request:${requestId}` });
         }
       } catch (err) {
-        if (callback) {
+        if (typeof callback === 'function') {
           callback({ success: false, message: err.message });
         }
       }

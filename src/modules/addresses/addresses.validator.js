@@ -21,6 +21,11 @@ export const createAddressSchema = z.object({
     postalCode: z.string().min(1, 'Postal code is required').trim(),
     country: z.string().optional().default('India'),
     isDefault: z.boolean().optional().default(false),
+    latitude: z.number().nullable().optional(),
+    longitude: z.number().nullable().optional(),
+    locationId: z.string().nullable().optional(),
+    locationName: z.string().nullable().optional(),
+    distanceFromLocationKm: z.number().nullable().optional(),
   }),
 });
 
@@ -39,5 +44,10 @@ export const updateAddressSchema = z.object({
     postalCode: z.string().min(1).optional(),
     country: z.string().optional(),
     isDefault: z.boolean().optional(),
+    latitude: z.number().nullable().optional(),
+    longitude: z.number().nullable().optional(),
+    locationId: z.string().nullable().optional(),
+    locationName: z.string().nullable().optional(),
+    distanceFromLocationKm: z.number().nullable().optional(),
   }),
 });

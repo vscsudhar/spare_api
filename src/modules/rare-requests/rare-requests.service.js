@@ -29,8 +29,21 @@ export const rareRequestsService = {
    * Submit a new Rare Product Request (Customer)
    */
   createRequest: async (userId, data) => {
+    let customerName = data.customerName || '';
+    let phone = data.phone || '';
+    try {
+      const Users = (await import('../users/users.model.js')).default;
+      const userDoc = await Users.findById(userId);
+      if (userDoc) {
+        if (!customerName) customerName = userDoc.name || '';
+        if (!phone) phone = userDoc.phone || '';
+      }
+    } catch (_) {}
+
     const requestDoc = await RareProductRequest.create({
       user: userId,
+      customerName,
+      phone,
       ...data,
       status: 'submitted',
     });
@@ -219,6 +232,7 @@ export const rareRequestsService = {
 
     // Emit event
     emitSocketEvent(`rare-request:${id}`, 'rare_chat:message', populatedMsg);
+    emitSocketEvent('admin:rare-requests', 'rare_chat:message', populatedMsg);
 
     // Trigger chat message notification
     try {
@@ -759,9 +773,9 @@ export const rareRequestsService = {
                 slug: item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString(36),
                 brand: requestDoc.vehicleBrand,
                 category: defaultCategory._id,
-                sellingPrice: item.unitPrice / 100,
-                mrp: (item.unitPrice / 100) * 1.2,
-                purchasePrice: (item.unitPrice / 100) * 0.7,
+                sellingPrice: item.unitPrice,
+                mrp: item.unitPrice * 1.2,
+                purchasePrice: item.unitPrice * 0.7,
                 currentStock: item.quantity,
                 active: true,
               },
@@ -792,15 +806,15 @@ export const rareRequestsService = {
           quantity: item.quantity,
           unitPrice: product.sellingPrice,
           taxPercentage: item.taxPercentage || 18,
-          totalPrice: (item.totalPrice || (item.unitPrice * item.quantity)) / 100,
+          totalPrice: item.totalPrice || (item.unitPrice * item.quantity),
         });
       }
 
       // Calculate totals in Rupees for Order
-      const grandTotal = quotation.grandTotal / 100;
-      const subTotal = quotation.subTotal / 100;
-      const taxAmount = quotation.taxAmount / 100;
-      const deliveryFee = quotation.deliveryFee / 100;
+      const grandTotal = quotation.grandTotal;
+      const subTotal = quotation.subTotal;
+      const taxAmount = quotation.taxAmount;
+      const deliveryFee = quotation.deliveryFee || 0;
       const orderNumber = `ORD-RARE-${Math.floor(100000 + Math.random() * 900000)}`;
 
       // Calculate estimated delivery

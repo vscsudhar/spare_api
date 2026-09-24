@@ -126,6 +126,11 @@ const shippingAddressSnapshotSchema = new mongoose.Schema({
   state: { type: String, required: true },
   postalCode: { type: String, required: true },
   country: { type: String, required: true, default: 'India' },
+  latitude: { type: Number, default: null },
+  longitude: { type: Number, default: null },
+  locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Location', default: null },
+  locationName: { type: String, default: null },
+  distanceFromLocationKm: { type: Number, default: null },
 });
 
 const orderSchema = new mongoose.Schema(
@@ -217,6 +222,7 @@ const orderSchema = new mongoose.Schema(
 
 // Indexes
 orderSchema.index({ user: 1 });
+orderSchema.index({ locationId: 1 });
 orderSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
 export const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
