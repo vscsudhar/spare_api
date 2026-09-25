@@ -28,6 +28,7 @@ import supportTicketsRoutes from '../modules/support-tickets/support-tickets.rou
 import returnsRoutes from '../modules/returns/returns.routes.js';
 import locationsRoutes from '../modules/locations/locations.routes.js';
 import deliveryChargesRoutes from '../modules/delivery-charges/delivery-charges.routes.js';
+import suggestionsRoutes, { adminSuggestionsRouter } from '../modules/suggestions/suggestions.routes.js';
 
 const router = Router();
 
@@ -132,5 +133,7 @@ router.use('/returns', returnsRoutes);
 router.use('/admin/locations', locationsRoutes);
 router.use('/locations', locationsRoutes);
 router.use('/delivery-charges', deliveryChargesRoutes);
+router.use('/suggestions', suggestionsRoutes);
+router.use('/admin/suggestions', adminSuggestionsRouter);
 
 export default router;

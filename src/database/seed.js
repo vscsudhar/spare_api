@@ -154,7 +154,7 @@ export const seedDatabase = async (disconnectAfter = false) => {
         emailVerified: true,
         phoneVerified: true,
       });
-      console.log(`🛡️ Created Admin Account: ${adminEmail}`);
+      console.log(`🛡️ Created Admin Account: ${adminEmail}`); 
     } else {
       console.log(`🛡️ Admin Account already exists: ${adminEmail}`);
     }
