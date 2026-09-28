@@ -47,9 +47,11 @@ export const deliveryChargesService = {
    * Calculate dynamic delivery fee based on order subTotal and optional locationId
    */
   calculateFee: async (subTotal = 0, locationId = null) => {
+    // If subTotal is passed in paise (> 5000), convert to rupees for tier comparison
+    const subTotalRupees = subTotal > 5000 ? subTotal / 100.0 : subTotal;
     const tiers = await deliveryChargesService.getAll({ isActive: true, locationId });
     if (!tiers || tiers.length === 0) {
-      return subTotal >= 999 ? 0 : 59;
+      return subTotalRupees >= 999 ? 0 : 59;
     }
 
     // Match tier where fromAmount <= subTotal and (toAmount is null or subTotal <= toAmount)
@@ -57,9 +59,9 @@ export const deliveryChargesService = {
       const from = t.fromAmount ?? 0;
       const to = t.toAmount;
       if (to === null || to === undefined) {
-        return subTotal >= from;
+        return subTotalRupees >= from;
       }
-      return subTotal >= from && subTotal <= to;
+      return subTotalRupees >= from && subTotalRupees <= to;
     });
 
     if (matchedTier) {
@@ -67,7 +69,7 @@ export const deliveryChargesService = {
     }
 
     // Default fallback
-    return subTotal >= 1000 ? 0 : 100;
+    return subTotalRupees >= 1000 ? 0 : 59;
   },
 
   /**

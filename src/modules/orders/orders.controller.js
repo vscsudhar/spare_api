@@ -1,8 +1,29 @@
+import invoicesService from '../invoices/invoices.service.js';
 import ordersService from './orders.service.js';
 import sendResponse from '../../utils/response.js';
 import catchAsync from '../../utils/catchAsync.js';
 
 export class OrdersController {
+  getOrderInvoice = catchAsync(async (req, res) => {
+    const data = await invoicesService.getOrCreateInvoiceForOrder(
+      req.params.id,
+      req.user._id,
+      req.user.role,
+      req.isOwner
+    );
+    return sendResponse(res, 200, 'Order invoice retrieved successfully', data);
+  });
+
+  getOrCreateOrderInvoice = catchAsync(async (req, res) => {
+    const data = await invoicesService.getOrCreateInvoiceForOrder(
+      req.params.id,
+      req.user._id,
+      req.user.role,
+      req.isOwner
+    );
+    return sendResponse(res, 200, 'Order invoice created or retrieved successfully', data);
+  });
+
   validateCheckout = catchAsync(async (req, res) => {
     const { addressId } = req.body;
     const data = await ordersService.validateCheckout(req.user._id, addressId);

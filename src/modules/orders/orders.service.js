@@ -38,10 +38,12 @@ export const ordersService = {
         throw new AppError(`Product ${item.product.name} is currently inactive.`, 400);
       }
 
-      const lineSubTotal = item.quantity * item.product.sellingPrice;
-      const lineTax = lineSubTotal * ((item.product.taxPercentage || 18) / 100);
+      const lineTotal = item.quantity * item.product.sellingPrice;
+      const taxRate = item.product.taxPercentage || 18;
+      const lineTaxable = Math.round(lineTotal / (1.0 + taxRate / 100.0));
+      const lineTax = lineTotal - lineTaxable;
 
-      subTotal += lineSubTotal;
+      subTotal += lineTotal;
       taxAmount += lineTax;
     }
 
@@ -52,7 +54,7 @@ export const ordersService = {
         if (coupon.discountType === 'flat') {
           discountAmount = coupon.discountValue;
         } else if (coupon.discountType === 'percentage') {
-          discountAmount = subTotal * (coupon.discountValue / 100);
+          discountAmount = Math.round(subTotal * (coupon.discountValue / 100));
           if (coupon.maxDiscountAmount) {
             discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
           }
@@ -61,8 +63,10 @@ export const ordersService = {
       }
     }
 
-    const deliveryFee = await deliveryChargesService.calculateFee(subTotal, address?.locationId || null);
-    const grandTotal = subTotal + taxAmount + deliveryFee - discountAmount;
+    const subTotalRupees = subTotal > 5000 ? subTotal / 100.0 : subTotal;
+    const deliveryFeeRupees = await deliveryChargesService.calculateFee(subTotalRupees, address?.locationId || null);
+    const deliveryFee = Math.round(deliveryFeeRupees * 100);
+    const grandTotal = subTotal + deliveryFee - discountAmount;
 
     return {
       subTotal,
@@ -107,7 +111,7 @@ export const ordersService = {
         throw new AppError('Shipping address not found.', 404);
       }
 
-      // 4. Calculate Server-side pricing & Snapshots list for available / fulfillable items
+      // 4. Calculate Server-side pricing (Selling prices are tax-inclusive consumer retail prices)
       let subTotal = 0;
       let taxAmount = 0;
       const orderItems = [];
@@ -124,15 +128,15 @@ export const ordersService = {
         const availableStock = product.currentStock ?? 0;
 
         if (isStockManaged && availableStock < item.quantity) {
-          // Strictly out of stock: Skip this item so remaining available items can still be ordered
           continue;
         }
 
-        const lineSubTotal = item.quantity * product.sellingPrice;
-        const lineTax = lineSubTotal * ((product.taxPercentage || 18) / 100);
-        const lineTotal = lineSubTotal + lineTax;
+        const lineTotal = item.quantity * product.sellingPrice;
+        const taxRate = product.taxPercentage || 18;
+        const lineTaxable = Math.round(lineTotal / (1.0 + taxRate / 100.0));
+        const lineTax = lineTotal - lineTaxable;
 
-        subTotal += lineSubTotal;
+        subTotal += lineTotal;
         taxAmount += lineTax;
 
         orderItems.push({
@@ -174,21 +178,22 @@ export const ordersService = {
           if (coupon.discountType === 'flat') {
             discountAmount = coupon.discountValue;
           } else if (coupon.discountType === 'percentage') {
-            discountAmount = subTotal * (coupon.discountValue / 100);
+            discountAmount = Math.round(subTotal * (coupon.discountValue / 100));
             if (coupon.maxDiscountAmount) {
               discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
             }
           }
           discountAmount = Math.min(discountAmount, subTotal);
           
-          // Increment usage count
           coupon.usageCount += 1;
           await coupon.save({ session });
         }
       }
 
-      const deliveryFee = await deliveryChargesService.calculateFee(subTotal, address?.locationId || null);
-      const grandTotal = subTotal + taxAmount + deliveryFee - discountAmount;
+      const subTotalInRupees = subTotal > 5000 ? subTotal / 100.0 : subTotal;
+      const deliveryFeeInRupees = await deliveryChargesService.calculateFee(subTotalInRupees, address?.locationId || null);
+      const deliveryFee = Math.round(deliveryFeeInRupees * 100);
+      const grandTotal = subTotal + deliveryFee - discountAmount;
       const orderNumber = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
 
       // 6. Deduct Stock Levels atomically inside Session for fulfilled items
@@ -288,6 +293,7 @@ export const ordersService = {
             user: userId,
             items: orderItems,
             shippingAddress,
+            paymentMethod: data.paymentMethod || 'Cash on Delivery',
             locationId: address.locationId ?? null,
             locationName: address.locationName ?? null,
             distanceFromLocationKm: address.distanceFromLocationKm ?? null,

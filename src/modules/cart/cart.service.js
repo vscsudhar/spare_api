@@ -12,7 +12,58 @@ export const cartService = {
     if (!cart) {
       cart = await Cart.create({ user: userId, items: [], coupon: null });
     }
-    return cart;
+
+    const cartObj = cart.toObject ? cart.toObject() : JSON.parse(JSON.stringify(cart));
+
+    let subtotal = 0;
+    let actualPriceTotal = 0;
+    let taxTotal = 0;
+
+    cartObj.items = (cartObj.items || []).map((item) => {
+      const prod = item.product || {};
+      const rawSelling = prod.sellingPrice || 0;
+      const sellingPrice =
+        rawSelling > 1000 && rawSelling % 100 === 0
+          ? rawSelling / 100.0
+          : rawSelling;
+      const taxRate = prod.taxPercentage || 18;
+      const actualPrice =
+        Math.round((sellingPrice / (1.0 + taxRate / 100.0)) * 100) / 100;
+      const qty = item.quantity || 1;
+      const lineSelling = Math.round(sellingPrice * qty * 100) / 100;
+      const lineActual = Math.round(actualPrice * qty * 100) / 100;
+      const lineTax = Math.round((lineSelling - lineActual) * 100) / 100;
+
+      subtotal += lineSelling;
+      actualPriceTotal += lineActual;
+      taxTotal += lineTax;
+
+      return {
+        ...item,
+        actualPrice,
+        sellingPrice,
+        taxAmount: lineTax,
+        taxRate,
+        taxPercentage: taxRate,
+        subtotal: lineSelling,
+        total: lineSelling,
+      };
+    });
+
+    subtotal = Math.round(subtotal * 100) / 100;
+    actualPriceTotal = Math.round(actualPriceTotal * 100) / 100;
+    taxTotal = Math.round(taxTotal * 100) / 100;
+
+    cartObj.actualPrice = actualPriceTotal;
+    cartObj.actualPriceTotal = actualPriceTotal;
+    cartObj.taxAmount = taxTotal;
+    cartObj.taxTotal = taxTotal;
+    cartObj.sellingPrice = subtotal;
+    cartObj.sellingPriceTotal = subtotal;
+    cartObj.subtotal = subtotal;
+    cartObj.subTotal = subtotal;
+
+    return cartObj;
   },
 
   /**

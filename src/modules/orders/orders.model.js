@@ -170,6 +170,11 @@ const orderSchema = new mongoose.Schema(
       default: 'unpaid',
       required: true,
     },
+    paymentMethod: {
+      type: String,
+      default: 'Cash on Delivery',
+      trim: true,
+    },
     shippingAddress: {
       type: shippingAddressSnapshotSchema,
       required: true,

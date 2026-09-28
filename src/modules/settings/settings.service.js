@@ -1,4 +1,6 @@
 import Settings from './settings.model.js';
+import Invoice from '../invoices/invoices.model.js';
+import { getStateCode } from '../invoices/invoices.helper.js';
 import { uploadFile } from '../../utils/storage.js';
 import AppError from '../../errors/AppError.js';
 
@@ -48,7 +50,37 @@ export const settingsService = {
       }
     }
 
-    return settings.save();
+    const saved = await settings.save();
+
+    // Synchronize latest business info to all existing invoices
+    if (section === 'general') {
+      const g = saved.general || {};
+      const businessState = g.state || 'Karnataka';
+      const businessStateCode = g.stateCode || getStateCode(businessState);
+
+      await Invoice.updateMany(
+        {},
+        {
+          $set: {
+            'business.name': g.appName || 'VoltSpare Automotive',
+            'business.legalName': g.legalName || g.appName || 'VoltSpare Automotive Technologies Pvt. Ltd.',
+            'business.addressLine1': g.addressLine1 || g.address || '12, MG Road, Landmark Block',
+            'business.addressLine2': g.addressLine2 || '',
+            'business.city': g.city || 'Bangalore',
+            'business.state': businessState,
+            'business.stateCode': businessStateCode,
+            'business.postalCode': g.postalCode || g.pincode || '560001',
+            'business.phone': g.supportPhone || '+91 99000 88000',
+            'business.email': g.supportEmail || 'billing@voltspare.com',
+            'business.gstin': g.gstin || g.gstNumber || '29AAAAA0000A1Z1',
+            'business.pan': g.pan || 'AAAAA0000A',
+            'business.website': g.website || 'www.voltspare.com',
+          },
+        }
+      ).catch(() => {});
+    }
+
+    return saved;
   },
 
   /**

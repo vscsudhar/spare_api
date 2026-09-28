@@ -1,3 +1,4 @@
+import Invoice from '../invoices/invoices.model.js';
 import Order from '../orders/orders.model.js';
 import Billing from './billing.model.js';
 import Products from '../products/products.model.js';
@@ -224,6 +225,82 @@ export const billingService = {
       );
 
       // Save billing invoice linking to order
+      // Also record into Invoice collection for unified invoicing
+      try {
+        await Invoice.create(
+          [
+            {
+              invoiceNumber,
+              order: order._id,
+              orderNumber,
+              user: userId,
+              invoiceDate: new Date(),
+              orderDate: new Date(),
+              customer: {
+                name: customerName || 'Walk-in Customer',
+                phone: customerPhone || '',
+                address: 'POS Counter Sale - In Store',
+                city: 'Store Counter',
+                state: 'In-Store',
+                stateCode: '33',
+                postalCode: '600001',
+                country: 'India',
+                gstin: 'URP (Unregistered Person)',
+              },
+              business: {
+                name: 'VoltSpare Automotive',
+                legalName: 'VoltSpare Automotive Technologies Pvt. Ltd.',
+                addressLine1: '12, MG Road, Landmark Block',
+                addressLine2: 'Indiranagar Commercial Zone',
+                city: 'Bangalore',
+                state: 'Karnataka',
+                stateCode: '29',
+                postalCode: '560001',
+                phone: '+91 99000 88000',
+                email: 'billing@voltspare.com',
+                gstin: '29AAAAA0000A1Z1',
+                pan: 'AAAAA0000A',
+                website: 'www.voltspare.com',
+              },
+              items: calculation.items.map((it) => ({
+                product: it.product,
+                productId: it.product ? it.product.toString() : '',
+                productName: it.name,
+                name: it.name,
+                sku: 'POS-ITEM',
+                hsnCode: '8708',
+                quantity: it.quantity,
+                unitPrice: it.unitPrice,
+                taxableValue: it.totalPrice,
+                amount: it.totalPrice,
+                tax: 0,
+                taxPercentage: 18,
+                total: it.totalPrice,
+              })),
+              subtotal: calculation.subTotal,
+              subTotal: calculation.subTotal,
+              taxAmount: calculation.taxAmount,
+              tax: calculation.taxAmount,
+              totalTax: calculation.taxAmount,
+              discount: calculation.discountAmount,
+              discountAmount: calculation.discountAmount,
+              deliveryCharge: 0,
+              deliveryFee: 0,
+              grandTotal: calculation.grandTotal,
+              amountInWords: '',
+              isIntraState: true,
+              paymentMethod: paymentAllocations[0]?.method?.toLowerCase() || 'cash',
+              paymentStatus: 'PAID',
+              orderStatus: 'delivered',
+              channel: 'pos',
+            },
+          ],
+          { session }
+        );
+      } catch (invErr) {
+        console.warn('POS Invoice mirror creation warning:', invErr.message);
+      }
+
       const invoice = await Billing.create(
         [
           {

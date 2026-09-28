@@ -20,6 +20,12 @@ ordersRouter.get('/my', ordersController.getMyOrders);
 ordersRouter.get('/my/:id', validate(idParamSchema), ordersController.getMyOrderById);
 ordersRouter.post('/:id/cancel', validate(idParamSchema), ordersController.cancelMyOrder);
 
+// Order Invoice Endpoints
+ordersRouter.get('/:id/invoice', validate(idParamSchema), ordersController.getOrderInvoice);
+ordersRouter.post('/:id/invoice', validate(idParamSchema), ordersController.getOrCreateOrderInvoice);
+ordersRouter.get('/my/:id/invoice', validate(idParamSchema), ordersController.getOrderInvoice);
+ordersRouter.post('/my/:id/invoice', validate(idParamSchema), ordersController.getOrCreateOrderInvoice);
+
 // 2. Customer Checkout Router
 const checkoutRouter = Router();
 checkoutRouter.use(protect);
@@ -32,6 +38,8 @@ adminOrdersRouter.use(protect);
 
 adminOrdersRouter.get('/', restrictTo('orders.read'), ordersController.adminGetAll);
 adminOrdersRouter.get('/:id', restrictTo('orders.read'), validate(idParamSchema), ordersController.adminGetById);
+adminOrdersRouter.get('/:id/invoice', restrictTo('orders.read'), validate(idParamSchema), ordersController.getOrderInvoice);
+adminOrdersRouter.post('/:id/invoice', restrictTo('orders.update'), validate(idParamSchema), ordersController.getOrCreateOrderInvoice);
 adminOrdersRouter.patch(
   '/:id/status',
   restrictTo('orders.update'),

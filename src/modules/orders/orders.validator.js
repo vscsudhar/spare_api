@@ -12,6 +12,8 @@ export const idParamSchema = z.object({
 export const createOrderSchema = z.object({
   body: z.object({
     addressId: objectIdSchema,
+    paymentMethod: z.string().optional(),
+    notes: z.string().optional(),
     idempotencyKey: z.string().optional(),
   }),
 });

@@ -3,8 +3,23 @@ import { z } from 'zod';
 export const updateGeneralSchema = z.object({
   body: z.object({
     appName: z.string().min(1, 'App name is required').optional(),
+    legalName: z.string().optional(),
     supportEmail: z.string().email('Invalid support email address').optional(),
     supportPhone: z.string().min(1, 'Support phone is required').optional(),
+    gstin: z.string().optional(),
+    gstNumber: z.string().optional(),
+    pan: z.string().optional(),
+    address: z.string().optional(),
+    addressLine1: z.string().optional(),
+    addressLine2: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    stateCode: z.string().optional(),
+    postalCode: z.string().optional(),
+    pincode: z.string().optional(),
+    latitude: z.number().optional(),
+    longitude: z.number().optional(),
+    website: z.string().optional(),
   }),
 });
 
