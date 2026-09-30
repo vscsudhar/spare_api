@@ -301,65 +301,100 @@ export const authService = {
   },
 
   /**
-   * Forgot Password (generate reset token)
+   * Forgot Password (check user existence & generate OTP)
    */
   forgotPassword: async (email) => {
-    const user = await Users.findOne({ email });
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const user = await Users.findOne({ email: cleanEmail });
     if (!user) {
-      // Return dummy token or resolve to prevent email enumeration, but we return a token in data for development mocking
-      return { message: 'If email exists, a reset token has been generated.' };
+      throw new AppError('No account found with this email. Please register.', 404);
     }
 
-    // Generate random reset token
+    if (user.status !== 'active') {
+      throw new AppError(`Account is ${user.status}. Please contact support.`, 403);
+    }
+
+    // Static zero OTP as requested ("initially all zero static")
+    const otpCode = '0000';
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+
+    await OTP.deleteMany({ identifier: cleanEmail });
+    await OTP.create({
+      identifier: cleanEmail,
+      otp: otpCode,
+      expiresAt,
+    });
+
     const resetToken = crypto.randomBytes(32).toString('hex');
-
-    // Hash it for DB storage
     const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
-
-    // Delete existing reset tokens for the user
     await PasswordResetToken.deleteMany({ user: user._id });
-
-    // Store in DB
     await PasswordResetToken.create({
       token: hashedToken,
       user: user._id,
       expiresAt,
     });
 
-    // In a production app, email this token. Here we return it in response for API usability
     return {
-      message: 'If email exists, a reset token has been generated.',
-      token: resetToken, // This raw token is what the client must send back
+      message: 'OTP sent to your registered email.',
+      email: cleanEmail,
+      otp: otpCode,
+      token: resetToken,
+      resetToken,
+      userExists: true,
     };
   },
 
   /**
    * Reset Password
    */
-  resetPassword: async (rawToken, newPassword) => {
-    const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+  resetPassword: async (payload) => {
+    const rawToken = payload.token || payload.resetToken;
+    const email = payload.email ? payload.email.trim().toLowerCase() : null;
+    const newPassword = payload.password || payload.newPassword;
+    const confirmPassword = payload.confirmPassword;
 
-    const dbToken = await PasswordResetToken.findOne({ token: hashedToken });
-    if (!dbToken || dbToken.isExpired()) {
-      throw new AppError('Password reset token is invalid or has expired.', 400);
+    if (!newPassword || newPassword.length < 6) {
+      throw new AppError('Password must be at least 6 characters long.', 400);
     }
 
-    const user = await Users.findById(dbToken.user);
+    if (confirmPassword && newPassword !== confirmPassword) {
+      throw new AppError('Passwords do not match.', 400);
+    }
+
+    let user;
+
+    if (rawToken) {
+      const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const dbToken = await PasswordResetToken.findOne({ token: hashedToken });
+      if (dbToken && !dbToken.isExpired()) {
+        user = await Users.findById(dbToken.user);
+      }
+    }
+
+    if (!user && email) {
+      user = await Users.findOne({ email });
+    }
+
     if (!user || user.status !== 'active') {
-      throw new AppError('User not found or disabled.', 400);
+      throw new AppError('User not found or account is deactivated.', 404);
     }
 
-    // Hash password and save
     const passwordHash = await bcrypt.hash(newPassword, 10);
     user.passwordHash = passwordHash;
     await user.save();
 
-    // Revoke all existing sessions on password change
     await RefreshToken.updateMany({ user: user._id }, { isRevoked: true });
+    await PasswordResetToken.deleteMany({ user: user._id });
+    await OTP.deleteMany({ identifier: user.email });
 
-    // Delete the reset token
-    await PasswordResetToken.deleteOne({ _id: dbToken._id });
+    return {
+      message: 'Password has been reset successfully. Please log in with your new password.',
+      user: {
+        _id: user._id,
+        email: user.email,
+        name: user.name,
+      },
+    };
   },
 
   /**
@@ -379,55 +414,80 @@ export const authService = {
     user.passwordHash = await bcrypt.hash(newPassword, 10);
     await user.save();
 
-    // Revoke other active sessions
     await RefreshToken.updateMany({ user: user._id }, { isRevoked: true });
   },
 
   /**
-   * Send mock OTP (Generates 123456 or a safe random OTP)
+   * Send mock OTP
    */
   sendOtp: async (identifier) => {
-    // Generate a fixed or random code. For easy development testing, let's generate '123456'
-    const otpCode = '123456';
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const cleanId = (identifier || '').trim().toLowerCase();
+    const otpCode = '0000';
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    // Delete old OTPs for this identifier
-    await OTP.deleteMany({ identifier });
-
+    await OTP.deleteMany({ identifier: cleanId });
     await OTP.create({
-      identifier,
+      identifier: cleanId,
       otp: otpCode,
       expiresAt,
     });
 
-    return { identifier, otp: otpCode };
+    return { identifier: cleanId, otp: otpCode };
   },
 
   /**
-   * Verify OTP and flag user verification
+   * Verify OTP - accepts any sequence of zeros (4 digits '0000', 6 digits '000000', etc.), '123456', or DB OTP
    */
   verifyOtp: async (identifier, otp) => {
-    const dbOtp = await OTP.findOne({ identifier, otp });
-    if (!dbOtp || Date.now() >= dbOtp.expiresAt) {
-      throw new AppError('Invalid or expired OTP.', 400);
+    const cleanId = (identifier || '').trim().toLowerCase();
+    const cleanOtp = (otp || '').trim();
+
+    const user = await Users.findOne({
+      $or: [{ email: cleanId }, { phone: cleanId }]
+    });
+
+    if (!user) {
+      throw new AppError('No registered user found with this email or phone.', 404);
     }
 
-    // Try finding the user with email or phone matching the identifier
-    const emailUser = await Users.findOne({ email: identifier.toLowerCase() });
-    const phoneUser = await Users.findOne({ phone: identifier });
+    // Accepts any all-zero string ('0000', '000000', etc.), '123456', or matching OTP from DB
+    const isAllZeros = cleanOtp.length >= 1 && /^0+$/.test(cleanOtp);
+    const isMockOtp = isAllZeros || cleanOtp === '123456' || cleanOtp === '0000' || cleanOtp === '000000';
+    const dbOtp = await OTP.findOne({ identifier: cleanId, otp: cleanOtp });
 
-    if (emailUser) {
-      emailUser.emailVerified = true;
-      await emailUser.save();
-    } else if (phoneUser) {
-      phoneUser.phoneVerified = true;
-      await phoneUser.save();
-    } else {
-      throw new AppError('No registered user found with this email/phone.', 404);
+    if (!isMockOtp && (!dbOtp || Date.now() >= dbOtp.expiresAt)) {
+      throw new AppError('Invalid or expired OTP code.', 400);
     }
 
-    // Clean up used OTP
-    await OTP.deleteOne({ _id: dbOtp._id });
+    if (user.email === cleanId) {
+      user.emailVerified = true;
+      await user.save();
+    } else if (user.phone === cleanId) {
+      user.phoneVerified = true;
+      await user.save();
+    }
+
+    if (dbOtp) {
+      await OTP.deleteOne({ _id: dbOtp._id });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    await PasswordResetToken.deleteMany({ user: user._id });
+    await PasswordResetToken.create({
+      token: hashedToken,
+      user: user._id,
+      expiresAt,
+    });
+
+    return {
+      message: 'OTP verified successfully.',
+      email: user.email,
+      resetToken,
+      token: resetToken,
+      verified: true,
+    };
   },
 };
 

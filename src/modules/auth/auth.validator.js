@@ -3,11 +3,7 @@ import { z } from 'zod';
 // Password validation helper
 const strongPassword = z
   .string()
-  .min(8, 'Password must be at least 8 characters long')
-  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-  .regex(/[0-9]/, 'Password must contain at least one number')
-  .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+  .min(6, 'Password must be at least 6 characters long');
 
 export const adminLoginSchema = z.object({
   body: z.object({
@@ -46,8 +42,11 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   body: z.object({
-    token: z.string().min(1, 'Token is required'),
+    email: z.string().optional(),
+    token: z.string().optional(),
+    resetToken: z.string().optional(),
     password: strongPassword,
+    confirmPassword: z.string().optional(),
   }),
 });
 
@@ -60,8 +59,8 @@ export const changePasswordSchema = z.object({
 
 export const sendOtpSchema = z.object({
   body: z.object({
-    email: z.string().email('Invalid email address').optional(),
-    phone: z.string().min(5, 'Invalid phone number').optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
   }).refine((data) => data.email || data.phone, {
     message: 'Either email or phone must be provided',
     path: ['email'],
@@ -70,7 +69,12 @@ export const sendOtpSchema = z.object({
 
 export const verifyOtpSchema = z.object({
   body: z.object({
-    identifier: z.string().min(1, 'Identifier (email or phone) is required'),
-    otp: z.string().length(6, 'OTP must be exactly 6 digits'),
+    identifier: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+    otp: z.string().min(1, 'OTP is required'),
+  }).refine((data) => data.identifier || data.email || data.phone, {
+    message: 'Either identifier, email, or phone must be provided',
+    path: ['identifier'],
   }),
 });

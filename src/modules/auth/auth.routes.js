@@ -28,6 +28,9 @@ router.post('/logout', authController.logout);
 
 // Password recovery endpoints
 router.post('/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
+router.post('/forgot-password/check-email', validate(forgotPasswordSchema), authController.forgotPassword);
+router.post('/forgot-password/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
+router.post('/forgot-password/reset-password', validate(resetPasswordSchema), authController.resetPassword);
 router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
 
 // OTP endpoints

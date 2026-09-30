@@ -65,7 +65,6 @@ export class AuthController {
   });
 
   getMe = catchAsync(async (req, res) => {
-    // Populate role/permissions if necessary, they are already attached in protect middleware
     return sendResponse(res, 200, 'Profile retrieved successfully', {
       user: req.user,
       permissions: req.permissions,
@@ -76,14 +75,21 @@ export class AuthController {
     const { email } = req.body;
     const result = await authService.forgotPassword(email);
 
-    return sendResponse(res, 200, result.message, { token: result.token });
+    return sendResponse(res, 200, result.message, result);
+  });
+
+  verifyOtp = catchAsync(async (req, res) => {
+    const identifier = req.body.email || req.body.phone || req.body.identifier;
+    const { otp } = req.body;
+    const result = await authService.verifyOtp(identifier, otp);
+
+    return sendResponse(res, 200, result.message || 'OTP verified successfully', result);
   });
 
   resetPassword = catchAsync(async (req, res) => {
-    const { token, password } = req.body;
-    await authService.resetPassword(token, password);
+    const result = await authService.resetPassword(req.body);
 
-    return sendResponse(res, 200, 'Password has been reset successfully');
+    return sendResponse(res, 200, result.message || 'Password has been reset successfully', result);
   });
 
   changePassword = catchAsync(async (req, res) => {
@@ -99,13 +105,6 @@ export class AuthController {
     const result = await authService.sendOtp(identifier);
 
     return sendResponse(res, 200, 'OTP sent successfully', result);
-  });
-
-  verifyOtp = catchAsync(async (req, res) => {
-    const { identifier, otp } = req.body;
-    await authService.verifyOtp(identifier, otp);
-
-    return sendResponse(res, 200, 'OTP verified successfully');
   });
 }
 
