@@ -25,6 +25,9 @@ export const customersService = {
 
     if (updateData.name) user.name = updateData.name;
     if (updateData.profileImage !== undefined) user.profileImage = updateData.profileImage;
+    if (updateData.gstNumber !== undefined) user.gstNumber = updateData.gstNumber;
+    if (updateData.businessName !== undefined) user.businessName = updateData.businessName;
+    if (updateData.address !== undefined) user.address = updateData.address;
 
     if (updateData.phone && updateData.phone !== user.phone) {
       const phoneExists = await Users.findOne({ phone: updateData.phone });

@@ -28,6 +28,12 @@ export class ProductsController {
     return sendResponse(res, 200, 'Product deleted successfully');
   });
 
+  bulkUpdatePrices = catchAsync(async (req, res) => {
+    const { products } = req.body;
+    const data = await productsService.bulkUpdatePrices(products);
+    return sendResponse(res, 200, 'Product prices updated successfully', data);
+  });
+
   updateStatus = catchAsync(async (req, res) => {
     const { active } = req.body;
     const data = await productsService.updateStatus(req.params.id, active);

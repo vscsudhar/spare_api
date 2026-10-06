@@ -47,6 +47,8 @@ export const createProductSchema = z.object({
       isDefault: z.boolean().optional().default(false),
     })).optional().default([]),
     sellingPrice: z.number().min(0, 'Selling price must be non-negative'),
+    leastSellingPrice1: z.number().min(0).optional().default(0),
+    leastSellingPrice2: z.number().min(0).optional().default(0),
     mrp: z.number().min(0, 'MRP must be non-negative'),
     purchasePrice: z.number().min(0, 'Purchase price must be non-negative'),
     taxPercentage: z.number().min(0).max(100).optional().default(18),
@@ -85,6 +87,8 @@ export const updateProductSchema = z.object({
       isDefault: z.boolean().optional().default(false),
     })).optional(),
     sellingPrice: z.number().min(0).optional(),
+    leastSellingPrice1: z.number().min(0).optional(),
+    leastSellingPrice2: z.number().min(0).optional(),
     mrp: z.number().min(0).optional(),
     purchasePrice: z.number().min(0).optional(),
     taxPercentage: z.number().min(0).max(100).optional(),
@@ -111,3 +115,16 @@ export const updateProductStatusSchema = z.object({
   }),
 });
 
+
+export const bulkUpdatePricesSchema = z.object({
+  body: z.object({
+    products: z.array(z.object({
+      id: objectIdSchema,
+      leastSellingPrice1: z.number().min(0).optional(),
+      leastSellingPrice2: z.number().min(0).optional(),
+      sellingPrice: z.number().min(0).optional(),
+      mrp: z.number().min(0).optional(),
+      purchasePrice: z.number().min(0).optional(),
+    })).min(1, 'At least one product update is required'),
+  }),
+});

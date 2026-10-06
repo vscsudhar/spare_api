@@ -307,6 +307,8 @@ export const productsService = {
       'compatibilities',
       'oemPartNumbers',
       'sellingPrice',
+      'leastSellingPrice1',
+      'leastSellingPrice2',
       'mrp',
       'purchasePrice',
       'taxPercentage',
@@ -470,6 +472,30 @@ export const productsService = {
     if (type) updateData.type = type;
     if (years) updateData.years = years;
     return VehicleModel.findByIdAndUpdate(id, updateData, { new: true });
+  },
+  /**
+   * Bulk Update Product Prices (Least selling prices, selling price, mrp)
+   */
+  bulkUpdatePrices: async (items) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return { modifiedCount: 0 };
+    }
+    const bulkOps = items.map((item) => {
+      const updateFields = {};
+      if (item.leastSellingPrice1 !== undefined) updateFields.leastSellingPrice1 = item.leastSellingPrice1;
+      if (item.leastSellingPrice2 !== undefined) updateFields.leastSellingPrice2 = item.leastSellingPrice2;
+      if (item.sellingPrice !== undefined) updateFields.sellingPrice = item.sellingPrice;
+      if (item.mrp !== undefined) updateFields.mrp = item.mrp;
+      if (item.purchasePrice !== undefined) updateFields.purchasePrice = item.purchasePrice;
+      return {
+        updateOne: {
+          filter: { _id: item.id },
+          update: { $set: updateFields },
+        },
+      };
+    });
+    const result = await Products.bulkWrite(bulkOps);
+    return result;
   },
 };
 

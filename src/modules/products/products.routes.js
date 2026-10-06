@@ -9,6 +9,7 @@ import {
   createProductSchema,
   updateProductSchema,
   updateProductStatusSchema,
+  bulkUpdatePricesSchema,
 } from './products.validator.js';
 
 const router = Router();
@@ -20,6 +21,8 @@ router.get('/featured', optionalProtect, productsController.getFeatured);
 router.get('/:id', optionalProtect, validate(idParamSchema), productsController.getById);
 
 // Protected administrative catalog endpoints
+router.patch('/bulk-prices', protect, restrictTo('products.update'), validate(bulkUpdatePricesSchema), productsController.bulkUpdatePrices);
+router.patch('/bulk/prices', protect, restrictTo('products.update'), validate(bulkUpdatePricesSchema), productsController.bulkUpdatePrices);
 router.post('/', protect, restrictTo('products.create'), validate(createProductSchema), productsController.create);
 router.patch('/:id', protect, restrictTo('products.update'), validate(updateProductSchema), productsController.update);
 router.delete('/:id', protect, restrictTo('products.delete'), validate(idParamSchema), productsController.delete);

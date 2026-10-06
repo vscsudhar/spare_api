@@ -111,6 +111,16 @@ const productsSchema = new mongoose.Schema(
       required: [true, 'Selling price is required'],
       min: 0,
     },
+    leastSellingPrice1: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    leastSellingPrice2: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     mrp: {
       type: Number,
       required: [true, 'MRP is required'],

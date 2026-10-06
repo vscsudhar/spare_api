@@ -30,6 +30,22 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    gstNumber: {
+      type: String,
+      default: '',
+      trim: true,
+      uppercase: true,
+    },
+    businessName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    address: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     locationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Location',
