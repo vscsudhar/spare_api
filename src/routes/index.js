@@ -30,6 +30,7 @@ import returnsRoutes from '../modules/returns/returns.routes.js';
 import locationsRoutes from '../modules/locations/locations.routes.js';
 import deliveryChargesRoutes from '../modules/delivery-charges/delivery-charges.routes.js';
 import suggestionsRoutes, { adminSuggestionsRouter } from '../modules/suggestions/suggestions.routes.js';
+import enquiriesRoutes, { adminEnquiriesRouter } from '../modules/enquiries/enquiries.routes.js';
 
 const router = Router();
 
@@ -137,5 +138,7 @@ router.use('/locations', locationsRoutes);
 router.use('/delivery-charges', deliveryChargesRoutes);
 router.use('/suggestions', suggestionsRoutes);
 router.use('/admin/suggestions', adminSuggestionsRouter);
+router.use('/enquiries', enquiriesRoutes);
+router.use('/admin/enquiries', adminEnquiriesRouter);
 
 export default router;
