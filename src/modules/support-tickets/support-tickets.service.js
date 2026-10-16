@@ -1,3 +1,4 @@
+import fcmService from '../notifications/fcm.service.js';
 import mongoose from 'mongoose';
 import AppError from '../../errors/AppError.js';
 import { SupportTicket, SupportTicketMessage } from './support-tickets.model.js';
@@ -50,12 +51,33 @@ export const supportTicketsService = {
     emitSocketEvent('admin:support-tickets', 'support_ticket:new', populatedTicket);
 
     try {
+      // Store / Admin notification
       await notificationsService.createNotification(null, {
         title: 'New Support Ticket',
         message: `Ticket #${ticketNumber}: ${data.subject}`,
         type: 'support_ticket_created',
         referenceId: ticket._id,
         referenceType: 'SupportTicket',
+      });
+
+      // Customer confirmation notification
+      await notificationsService.createNotification(userId, {
+        title: 'Support Ticket Created 🎫',
+        message: `Your support ticket #${ticketNumber} has been received. Our team will review it shortly.`,
+        type: 'support_ticket_created',
+        referenceId: ticket._id,
+        referenceType: 'SupportTicket',
+      });
+
+      // Customer FCM push notification
+      await fcmService.sendToUser(userId, {
+        title: 'Support Ticket Created 🎫',
+        body: `Ticket #${ticketNumber} created: ${data.subject}`,
+        data: {
+          type: 'support_ticket_created',
+          ticketId: ticket._id.toString(),
+          ticketNumber: ticketNumber,
+        },
       });
     } catch (_) {}
 
@@ -148,17 +170,44 @@ export const supportTicketsService = {
     emitSocketEvent(`support-ticket:${ticketId}`, 'support_ticket:message', populatedMsg);
     emitSocketEvent('admin:support-tickets', 'support_ticket:updated', { ticketId, status: ticket.status });
 
-    // Send notification
+    // Send notification and FCM push
     try {
       const recipientId = isAdmin ? ticket.user : null;
+      const previewText = messageText.length > 60 ? messageText.substring(0, 60) + '...' : messageText;
+      const tTitle = isAdmin ? `VoltSpare Support: Ticket #${ticket.ticketNumber}` : `Reply on Ticket #${ticket.ticketNumber}`;
+
       await notificationsService.createNotification(recipientId, {
-        title: `Update on Ticket #${ticket.ticketNumber}`,
-        message: messageText.length > 60 ? messageText.substring(0, 60) + '...' : messageText,
-        type: 'support_ticket_message',
+        title: tTitle,
+        message: previewText,
+        type: 'ticket_chat',
         referenceId: ticket._id,
         referenceType: 'SupportTicket',
       });
-    } catch (_) {}
+
+      if (isAdmin && ticket.user) {
+        await fcmService.sendToUser(ticket.user, {
+          title: tTitle,
+          body: previewText,
+          data: {
+            type: 'ticket_chat',
+            ticketId: ticket._id.toString(),
+            messageId: message._id.toString(),
+          },
+        });
+      } else if (!isAdmin) {
+        await fcmService.sendToRole(['admin', 'owner', 'staff'], {
+          title: tTitle,
+          body: previewText,
+          data: {
+            type: 'ticket_chat',
+            ticketId: ticket._id.toString(),
+            messageId: message._id.toString(),
+          },
+        });
+      }
+    } catch (err) {
+      console.error('Failed to trigger ticket reply notification:', err);
+    }
 
     return populatedMsg;
   },
@@ -193,6 +242,34 @@ export const supportTicketsService = {
       status: ticket.status,
     });
     emitSocketEvent('admin:support-tickets', 'support_ticket:updated', populatedTicket);
+
+    // Notify customer on status update
+    if (ticket.user) {
+      try {
+        const statusLabel = ticket.status.replace(/_/g, ' ').toUpperCase();
+        const tTitle = `Ticket #${ticket.ticketNumber} Status: ${statusLabel}`;
+        const tMessage = `Your support ticket #${ticket.ticketNumber} is now marked as "${ticket.status.replace(/_/g, ' ')}".`;
+        await notificationsService.createNotification(ticket.user, {
+          title: tTitle,
+          message: tMessage,
+          type: 'support_ticket_status',
+          referenceId: ticket._id,
+          referenceType: 'SupportTicket',
+        });
+        await fcmService.sendToUser(ticket.user, {
+          title: tTitle,
+          body: tMessage,
+          data: {
+            type: 'support_ticket_status',
+            ticketId: ticket._id.toString(),
+            ticketNumber: ticket.ticketNumber,
+            status: ticket.status,
+          },
+        });
+      } catch (err) {
+        console.error('Failed to notify customer of ticket status update:', err);
+      }
+    }
 
     return populatedTicket;
   },

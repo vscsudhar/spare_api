@@ -76,6 +76,11 @@ export class OrdersController {
     return sendResponse(res, 200, 'Delivery driver assigned successfully', data);
   });
 
+  adminUnassignDelivery = catchAsync(async (req, res) => {
+    const data = await ordersService.adminUnassignDelivery(req.params.id, req.body?.notes);
+    return sendResponse(res, 200, 'Delivery driver unassigned successfully', data);
+  });
+
   adminAddNote = catchAsync(async (req, res) => {
     const { text } = req.body;
     const data = await ordersService.adminAddNote(req.params.id, text, req.user._id);

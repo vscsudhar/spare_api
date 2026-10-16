@@ -120,6 +120,12 @@ export class RareRequestsController {
     return sendResponse(res, 200, 'Quotation sent successfully', data);
   });
 
+  adminCancelRequest = catchAsync(async (req, res) => {
+    const { reason } = req.body || {};
+    const data = await rareRequestsService.adminUpdateStatus(req.params.id, 'cancelled', reason, req.user._id);
+    return sendResponse(res, 200, 'Request cancelled successfully', data);
+  });
+
   adminConvertToOrder = catchAsync(async (req, res) => {
     const { addressId } = req.body;
     const data = await rareRequestsService.adminConvertToOrder(req.params.id, addressId, req.user._id);

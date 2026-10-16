@@ -39,6 +39,7 @@ adminRareRequestsRouter.get('/', restrictTo('rare_requests.read'), rareRequestsC
 adminRareRequestsRouter.get('/:id', restrictTo('rare_requests.read'), validate(idParamSchema), rareRequestsController.adminGetById);
 adminRareRequestsRouter.get('/:id/messages', restrictTo('rare_requests.read'), validate(idParamSchema), rareRequestsController.getChatMessages);
 adminRareRequestsRouter.patch('/:id/status', restrictTo('rare_requests.reply'), validate(updateStatusSchema), rareRequestsController.adminUpdateStatus);
+adminRareRequestsRouter.patch('/:id/cancel', restrictTo('rare_requests.reply'), validate(idParamSchema), rareRequestsController.adminCancelRequest);
 adminRareRequestsRouter.post('/:id/messages', restrictTo('rare_requests.reply'), validate(createMessageSchema), rareRequestsController.adminSendChatMessage);
 adminRareRequestsRouter.post('/:id/quotations', restrictTo('rare_requests.reply'), validate(createQuotationSchema), rareRequestsController.adminCreateQuotation);
 adminRareRequestsRouter.patch('/:id/quotations/:quotationId', restrictTo('rare_requests.reply'), validate(updateQuotationSchema), rareRequestsController.adminUpdateQuotation);

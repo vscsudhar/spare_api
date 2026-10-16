@@ -35,14 +35,22 @@ export const refreshTokenSchema = z.object({
 });
 
 export const forgotPasswordSchema = z.object({
-  body: z.object({
-    email: z.string().email('Invalid email address').trim().toLowerCase(),
-  }),
+  body: z
+    .object({
+      email: z.string().email('Invalid email address').trim().toLowerCase().optional(),
+      phone: z.string().optional(),
+      identifier: z.string().optional(),
+    })
+    .refine((data) => data.email || data.phone || data.identifier, {
+      message: 'Either email, phone, or identifier must be provided',
+      path: ['email'],
+    }),
 });
 
 export const resetPasswordSchema = z.object({
   body: z.object({
     email: z.string().optional(),
+    phone: z.string().optional(),
     token: z.string().optional(),
     resetToken: z.string().optional(),
     password: strongPassword,
@@ -58,13 +66,16 @@ export const changePasswordSchema = z.object({
 });
 
 export const sendOtpSchema = z.object({
-  body: z.object({
-    email: z.string().optional(),
-    phone: z.string().optional(),
-  }).refine((data) => data.email || data.phone, {
-    message: 'Either email or phone must be provided',
-    path: ['email'],
-  }),
+  body: z
+    .object({
+      identifier: z.string().optional(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+    })
+    .refine((data) => data.identifier || data.email || data.phone, {
+      message: 'Either email, phone, or identifier must be provided',
+      path: ['email'],
+    }),
 });
 
 export const verifyOtpSchema = z.object({

@@ -1,3 +1,4 @@
+import fcmService from '../notifications/fcm.service.js';
 import AppError from '../../errors/AppError.js';
 import {
   RareProductRequest,
@@ -74,12 +75,32 @@ export const rareRequestsService = {
 
     // Trigger new sourcing request notification
     try {
+      // Store / Admin notification
       await notificationsService.createNotification(null, {
         title: 'New Sourcing Request',
         message: `A new sourcing request for "${requestDoc.title}" has been submitted.`,
         type: 'new_rare_request',
         referenceId: requestDoc._id,
         referenceType: 'RareProductRequest',
+      });
+
+      // Customer confirmation notification
+      await notificationsService.createNotification(userId, {
+        title: 'Rare Product Request Submitted 🔍',
+        message: `Your request for "${requestDoc.title}" has been submitted. Our team will verify and quote soon.`,
+        type: 'rare_product_chat',
+        referenceId: requestDoc._id,
+        referenceType: 'RareProductRequest',
+      });
+
+      // Customer FCM push notification
+      await fcmService.sendToUser(userId, {
+        title: 'Rare Product Request Submitted 🔍',
+        body: `Your request for "${requestDoc.title}" has been submitted.`,
+        data: {
+          type: 'rare_product_chat',
+          requestId: requestDoc._id.toString(),
+        },
       });
     } catch (err) {
       console.error('Failed to trigger sourcing request notification:', err);
@@ -163,7 +184,7 @@ export const rareRequestsService = {
 
     const uploadedImages = [];
     for (const file of files) {
-      const result = await uploadFile(file);
+      const result = await uploadFile(file, { folder: 'voltspare/chat', prefix: 'chat' });
       uploadedImages.push({
         url: result.url,
         publicId: result.publicId,
@@ -183,6 +204,7 @@ export const rareRequestsService = {
       senderType: isAdmin ? 'admin' : 'customer',
       messageType: 'image',
       imageUrl: uploadedImages[0]?.url || '',
+      publicId: uploadedImages[0]?.publicId || null,
       message: `${actionBy} uploaded ${uploadedImages.length} image(s)`,
     });
 
@@ -237,13 +259,42 @@ export const rareRequestsService = {
     // Trigger chat message notification
     try {
       const recipientId = isAdmin ? requestDoc.user : null;
+      const previewText = text.length > 60 ? text.substring(0, 60) + '...' : text;
+      const notifTitle = isAdmin ? 'VoltSpare Support' : 'New Rare Product Message';
+
       await notificationsService.createNotification(recipientId, {
-        title: 'New Chat Message',
-        message: text.length > 50 ? text.substring(0, 50) + '...' : text,
-        type: 'new_chat_message',
+        title: notifTitle,
+        message: previewText,
+        type: 'rare_product_chat',
         referenceId: requestDoc._id,
         referenceType: 'RareProductRequest',
       });
+
+      if (isAdmin && requestDoc.user) {
+        // Send push notification to the customer
+        await fcmService.sendToUser(requestDoc.user, {
+          title: notifTitle,
+          body: previewText,
+          data: {
+            type: 'rare_product_chat',
+            conversationId: requestDoc._id.toString(),
+            requestId: requestDoc._id.toString(),
+            messageId: chatMsg._id.toString(),
+          },
+        });
+      } else if (!isAdmin) {
+        // Send push notification to admins
+        await fcmService.sendToRole(['admin', 'owner'], {
+          title: notifTitle,
+          body: previewText,
+          data: {
+            type: 'rare_product_chat',
+            conversationId: requestDoc._id.toString(),
+            requestId: requestDoc._id.toString(),
+            messageId: chatMsg._id.toString(),
+          },
+        });
+      }
     } catch (err) {
       console.error('Failed to trigger chat message notification:', err);
     }
@@ -524,6 +575,44 @@ export const rareRequestsService = {
       status,
     });
 
+    // Trigger in-app notification and FCM push notification to customer
+    try {
+      const statusLabels = {
+        submitted: 'Request Received 📋',
+        searching: 'Searching for Part 🔍',
+        found: 'Part Found! 🎯',
+        quotation_sent: 'Quotation Ready 💰',
+        negotiation: 'In Negotiation 💬',
+        approved: 'Request Approved ✅',
+        cancelled: 'Request Cancelled ❌',
+        converted_to_order: 'Order Created 📦',
+      };
+      const title = `Rare Part: ${statusLabels[status] || status.replace(/_/g, ' ').toUpperCase()}`;
+      const partName = requestDoc.partName || requestDoc.title || 'Requested Part';
+      const body = `Status for "${partName}" has been updated to "${status.replace(/_/g, ' ')}".`;
+
+      await notificationsService.createNotification(requestDoc.user, {
+        title,
+        message: body,
+        type: 'rare_product_chat',
+        referenceId: requestDoc._id,
+        referenceType: 'RareProductRequest',
+      });
+
+      await fcmService.sendToUser(requestDoc.user, {
+        title,
+        body,
+        data: {
+          type: 'rare_product_chat',
+          requestId: requestDoc._id.toString(),
+          status: status,
+        },
+      });
+      console.log(`📲 FCM push dispatched to customer ${requestDoc.user} for rare request #${requestDoc._id} status -> ${status}`);
+    } catch (pushErr) {
+      console.error('Failed to send push for rare request status change:', pushErr.message);
+    }
+
     return requestDoc;
   },
 
@@ -682,15 +771,32 @@ export const rareRequestsService = {
       status: 'quotation_sent',
     });
 
-    // Trigger quotation notification
+    // Trigger quotation notification and FCM push
     try {
+      const partName = requestDoc.partName || requestDoc.title || 'Requested Part';
+      const formattedTotal = (quotation.grandTotal / 100).toFixed(2);
+      const qTitle = 'New Quotation Received 💰';
+      const qBody = `Admin has sent quotation ${quotation.quotationNumber} (₹${formattedTotal}) for "${partName}".`;
+
       await notificationsService.createNotification(requestDoc.user, {
-        title: 'New Quotation Received',
-        message: `Admin has sent a quotation ${quotation.quotationNumber} for your rare request.`,
+        title: qTitle,
+        message: qBody,
         type: 'quotation',
         referenceId: requestDoc._id,
         referenceType: 'RareProductRequest',
       });
+
+      await fcmService.sendToUser(requestDoc.user, {
+        title: qTitle,
+        body: qBody,
+        data: {
+          type: 'rare_product_chat',
+          requestId: requestDoc._id.toString(),
+          quotationId: quotationId.toString(),
+          status: 'quotation_sent',
+        },
+      });
+      console.log(`📲 FCM push dispatched to customer ${requestDoc.user} for quotation ${quotation.quotationNumber}`);
     } catch (err) {
       console.error('Failed to trigger quotation notification:', err);
     }

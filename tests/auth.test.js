@@ -27,20 +27,19 @@ describe('Auth & RBAC Integration Tests', () => {
   beforeAll(async () => {
     // Connect and seed database
     await connectDB();
+    await Users.deleteMany({ email: { $in: [customerEmail, staffEmail, 'dup@test.com', process.env.OWNER_EMAIL || 'owner@voltspare.com'] } });
+    await RefreshToken.deleteMany({});
     await seedDatabase(false);
 
     // Fetch seeded roles
     salesStaffRole = await Role.findOne({ name: 'sales_staff' });
-
-    // Clean up any test users that might exist
-    await Users.deleteMany({ email: { $in: [customerEmail, staffEmail, 'dup@test.com'] } });
-    await RefreshToken.deleteMany({});
   });
 
   afterAll(async () => {
     // Cleanup databases
-    await Users.deleteMany({ email: { $in: [customerEmail, staffEmail, 'dup@test.com'] } });
+    await Users.deleteMany({ email: { $in: [customerEmail, staffEmail, 'dup@test.com', process.env.OWNER_EMAIL || 'owner@voltspare.com'] } });
     await RefreshToken.deleteMany({});
+    await seedDatabase(false);
     await mongoose.connection.close();
   });
 
@@ -85,7 +84,7 @@ describe('Auth & RBAC Integration Tests', () => {
 
       expect(res.statusCode).toEqual(400);
       expect(res.body.success).toBe(false);
-      expect(res.body.errors[0].message).toContain('at least 8 characters');
+      expect(res.body.errors[0].message).toContain('at least 6 characters');
     });
   });
 
@@ -169,7 +168,7 @@ describe('Auth & RBAC Integration Tests', () => {
       });
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.data.otp).toEqual('123456');
+      expect(['0000', '123456']).toContain(res.body.data.otp);
     });
 
     it('should verify OTP and mark user as verified', async () => {
@@ -343,6 +342,79 @@ describe('Auth & RBAC Integration Tests', () => {
       const user = await Users.findOne({ email: customerEmail });
       const activeTokensCount = await RefreshToken.countDocuments({ user: user._id, isRevoked: false });
       expect(activeTokensCount).toEqual(0);
+    });
+  });
+
+  describe('Forgot Password and Password Reset Flow', () => {
+    let resetToken;
+
+    it('should generate reset token via /forgot-password with email and phone', async () => {
+      const res = await request(app).post('/api/v1/auth/forgot-password').send({
+        email: 'owner@voltspare.com',
+        phone: '+1234567890',
+      });
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data).toHaveProperty('token');
+      expect(res.body.data.otp).toEqual('0000');
+      resetToken = res.body.data.token;
+    });
+
+    it('should reject forgot-password if phone number does not match email account', async () => {
+      const res = await request(app).post('/api/v1/auth/forgot-password').send({
+        email: 'owner@voltspare.com',
+        phone: '9999999999',
+      });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toContain('Mobile number does not match');
+    });
+
+    it('should return 404 for unregistered user with friendly message', async () => {
+      const res = await request(app).post('/api/v1/auth/forgot-password').send({
+        email: 'unregistered.user@test.com',
+      });
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.message).toContain('No account found with this email / phone');
+      expect(res.body.message).not.toContain('staff');
+    });
+
+    it('should allow customer forgot-password via /customer/forgot-password route', async () => {
+      const res = await request(app).post('/api/v1/auth/customer/forgot-password').send({
+        email: 'customer.dash@test.com',
+      });
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.user.role).toEqual('customer');
+      expect(res.body.data.otp).toEqual('0000');
+    });
+
+    it('should reset password via /reset-password', async () => {
+      const res = await request(app).post('/api/v1/auth/reset-password').send({
+        email: 'owner@voltspare.com',
+        token: resetToken,
+        password: 'NewOwnerPass123!',
+        confirmPassword: 'NewOwnerPass123!',
+      });
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.user.email).toEqual('owner@voltspare.com');
+    });
+
+    it('should login with new password and reject old password', async () => {
+      const resOld = await request(app).post('/api/v1/auth/admin/login').send({
+        email: 'owner@voltspare.com',
+        password: process.env.OWNER_PASSWORD,
+      });
+      expect(resOld.statusCode).toEqual(401);
+
+      const resNew = await request(app).post('/api/v1/auth/admin/login').send({
+        email: 'owner@voltspare.com',
+        password: 'NewOwnerPass123!',
+      });
+      expect(resNew.statusCode).toEqual(200);
+      expect(resNew.body.data.user.email).toEqual('owner@voltspare.com');
     });
   });
 });

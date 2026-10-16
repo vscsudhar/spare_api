@@ -1,3 +1,4 @@
+import { initFirebaseAdmin } from './config/firebase.js';
 import app from './app.js';
 import env from './config/env.js';
 import { connectDB, closeDB } from './config/db.js';
@@ -13,10 +14,24 @@ const startServer = async () => {
   // 2. Seed Database (Permissions, Roles, Owner)
   await seedDatabase(false);
 
+  // 3. Initialize Firebase Admin SDK
+  initFirebaseAdmin();
+
   // 3. Start Listening
   const port = env.PORT || 5000;
   server = app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Server listening on port ${port} in ${env.NODE_ENV} mode`);
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n❌ Port ${port} is already in use by another running process.`);
+      console.error(`   To free port ${port} on Windows PowerShell, run:`);
+      console.error(`   Stop-Process -Id (Get-NetTCPConnection -LocalPort ${port}).OwningProcess -Force\n`);
+    } else {
+      console.error('Server error:', err);
+    }
+    process.exit(1);
   });
 
   // Initialize Socket.IO binding

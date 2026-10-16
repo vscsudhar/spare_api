@@ -11,14 +11,12 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: [true, 'Email is required'],
-      unique: true,
       trim: true,
       lowercase: true,
     },
     phone: {
       type: String,
       required: [true, 'Phone number is required'],
-      unique: true,
       trim: true,
     },
     passwordHash: {
@@ -103,6 +101,10 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Compound unique indexes: Email and phone are unique per role (customers separate from staff/users)
+userSchema.index({ email: 1, role: 1 }, { unique: true });
+userSchema.index({ phone: 1, role: 1 }, { unique: true });
 
 // Method to verify password
 userSchema.methods.comparePassword = async function (candidatePassword) {

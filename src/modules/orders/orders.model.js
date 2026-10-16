@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 
 const orderItemProductSnapshotSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -51,8 +51,10 @@ const orderStatusHistorySchema = new mongoose.Schema({
       'processing',
       'packed',
       'shipped',
+      'in_transit',
       'out_for_delivery',
       'delivered',
+      'delivery_later',
       'cancelled',
       'returned',
     ],
@@ -97,7 +99,7 @@ const deliveryAssignmentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['assigned', 'picked_up', 'delivered', 'failed'],
+    enum: ['assigned', 'picked_up', 'in_transit', 'delivered', 'delivery_later', 'failed', 'rescheduled'],
     default: 'assigned',
     required: true,
   },
@@ -156,8 +158,10 @@ const orderSchema = new mongoose.Schema(
         'processing',
         'packed',
         'shipped',
+        'in_transit',
         'out_for_delivery',
         'delivered',
+        'delivery_later',
         'cancelled',
         'returned',
       ],
@@ -232,3 +236,5 @@ orderSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
 export const Order = mongoose.models.Order || mongoose.model('Order', orderSchema);
 export default Order;
+
+

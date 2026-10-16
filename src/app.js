@@ -20,26 +20,20 @@ const isOriginAllowed = (origin) => {
 
   // Allow local and LAN development origins (Flutter Web / Dev servers)
   if (
+    origin === 'http://localhost' ||
     origin.startsWith('http://localhost:') ||
+    origin === 'https://localhost' ||
+    origin.startsWith('https://localhost:') ||
+    origin === 'http://127.0.0.1' ||
     origin.startsWith('http://127.0.0.1:') ||
+    origin === 'https://127.0.0.1' ||
+    origin.startsWith('https://127.0.0.1:') ||
     origin.startsWith('http://192.168.') ||
+    origin.startsWith('https://192.168.') ||
     origin.startsWith('http://10.') ||
-    origin.startsWith('http://172.16.') ||
-    origin.startsWith('http://172.17.') ||
-    origin.startsWith('http://172.18.') ||
-    origin.startsWith('http://172.19.') ||
-    origin.startsWith('http://172.20.') ||
-    origin.startsWith('http://172.21.') ||
-    origin.startsWith('http://172.22.') ||
-    origin.startsWith('http://172.23.') ||
-    origin.startsWith('http://172.24.') ||
-    origin.startsWith('http://172.25.') ||
-    origin.startsWith('http://172.26.') ||
-    origin.startsWith('http://172.27.') ||
-    origin.startsWith('http://172.28.') ||
-    origin.startsWith('http://172.29.') ||
-    origin.startsWith('http://172.30.') ||
-    origin.startsWith('http://172.31.')
+    origin.startsWith('https://10.') ||
+    origin.startsWith('http://172.') ||
+    origin.startsWith('https://172.')
   ) {
     return true;
   }
@@ -49,6 +43,14 @@ const isOriginAllowed = (origin) => {
 
   return false;
 };
+
+// 1. Enable Private Network Access (PNA) for browsers communicating with LAN IP from localhost
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -68,14 +70,20 @@ const corsOptions = {
     'Origin',
     'Access-Control-Request-Method',
     'Access-Control-Request-Headers',
+    'Access-Control-Request-Private-Network',
   ],
   exposedHeaders: ['Content-Range', 'X-Content-Range', 'RateLimit-Limit', 'RateLimit-Remaining'],
   optionsSuccessStatus: 200,
 };
 
-// 1. Enable CORS BEFORE any routes, helmet or body parsing
+// 2. Enable CORS BEFORE any routes, helmet or body parsing
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('*', (req, res, next) => {
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  cors(corsOptions)(req, res, next);
+});
 
 // 2. Set security HTTP headers with cross-origin resource policy allowed
 app.use(
@@ -118,6 +126,15 @@ app.use('/api', limiter);
 
 // 8. Register routes
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'VoltSpare API is running and reachable',
+    timestamp: new Date().toISOString(),
+    environment: env.NODE_ENV,
+  });
+});
+
 app.use(env.API_PREFIX, baseRoutes);
 
 // 9. Fallback for unhandled endpoints

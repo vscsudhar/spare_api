@@ -1,3 +1,4 @@
+import { deleteFromCloudinary } from '../../utils/storage.js';
 import Wishlist from '../wishlist/wishlist.model.js';
 ﻿import AppError from '../../errors/AppError.js';
 import Products from './products.model.js';
@@ -366,20 +367,28 @@ export const productsService = {
   /**
    * Add image to product
    */
-  addImage: async (id, url, isDefault = false) => {
+  addImage: async (id, urlOrData, isDefault = false) => {
     const product = await Products.findById(id);
     if (!product) {
       throw new AppError('Product not found.', 404);
     }
 
+    let url = typeof urlOrData === 'string' ? urlOrData : urlOrData?.url;
+    let publicId = typeof urlOrData === 'object' ? (urlOrData?.publicId || urlOrData?.public_id || null) : null;
+    let def = typeof urlOrData === 'object' && urlOrData?.isDefault !== undefined ? urlOrData.isDefault : isDefault;
+
+    if (!url) {
+      throw new AppError('Image URL is required.', 400);
+    }
+
     // If setting to default, clear other default images
-    if (isDefault) {
+    if (def) {
       product.images.forEach((img) => {
         img.isDefault = false;
       });
     }
 
-    product.images.push({ url, isDefault });
+    product.images.push({ url, publicId, isDefault: def });
     await product.save();
     return product;
   },
@@ -398,8 +407,18 @@ export const productsService = {
       throw new AppError('Image not found in product gallery.', 404);
     }
 
-    product.images.splice(imageIndex, 1);
+    const [removedImage] = product.images.splice(imageIndex, 1);
     await product.save();
+
+    // Safely delete from Cloudinary if publicId exists
+    if (removedImage?.publicId) {
+      try {
+        await deleteFromCloudinary(removedImage.publicId);
+      } catch (err) {
+        console.error('Failed to delete image from Cloudinary:', err);
+      }
+    }
+
     return product;
   },
 

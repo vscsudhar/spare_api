@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import mongoose from 'mongoose';
 import productsController from '../modules/products/products.controller.js';
 
@@ -31,6 +31,7 @@ import locationsRoutes from '../modules/locations/locations.routes.js';
 import deliveryChargesRoutes from '../modules/delivery-charges/delivery-charges.routes.js';
 import suggestionsRoutes, { adminSuggestionsRouter } from '../modules/suggestions/suggestions.routes.js';
 import enquiriesRoutes, { adminEnquiriesRouter } from '../modules/enquiries/enquiries.routes.js';
+import deliveryRoutes from '../modules/delivery/delivery.routes.js';
 
 const router = Router();
 
@@ -140,5 +141,7 @@ router.use('/suggestions', suggestionsRoutes);
 router.use('/admin/suggestions', adminSuggestionsRouter);
 router.use('/enquiries', enquiriesRoutes);
 router.use('/admin/enquiries', adminEnquiriesRouter);
+router.use('/delivery', deliveryRoutes);
 
 export default router;
+

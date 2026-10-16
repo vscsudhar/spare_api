@@ -5,3 +5,8 @@ uploads/*
 !uploads/.gitkeep
 .DS_Store
 *.log
+
+# Firebase Secrets
+service-account*.json
+*serviceAccount*.json
+*firebase*.json

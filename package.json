@@ -11,7 +11,9 @@
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
-    "seed": "node src/database/seed.js"
+    "seed": "node src/database/seed.js",
+    "clean:port": "powershell -Command \"try { Get-NetTCPConnection -LocalPort 5000 -ErrorAction Stop | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force } } catch { exit 0 }\"",
+    "migrate:images": "node scripts/migrate_to_cloudinary.js"
   },
   "keywords": [
     "voltspare",
@@ -31,11 +33,13 @@
     "express": "^4.19.2",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.2.0",
+    "firebase-admin": "^14.5.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.3.2",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "nodemailer": "^10.1.1",
     "socket.io": "^4.7.5",
     "zod": "^3.22.4"
   },

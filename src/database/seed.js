@@ -138,6 +138,27 @@ export const seedDatabase = async (disconnectAfter = false) => {
       console.log(`👑 Owner Account already exists: ${ownerEmail}`);
     }
 
+    // Seed Sudhar Owner Account
+    const sudharEmail = 'sudhar@mail.com';
+    const sudharExists = await Users.findOne({ email: sudharEmail, includeDeleted: true });
+    if (!sudharExists) {
+      const passwordHash = await bcrypt.hash('OwnerPassword123!', 10);
+      await Users.create({
+        name: 'Sudharsan (Owner)',
+        email: sudharEmail,
+        phone: '9842124312',
+        passwordHash,
+        role: rolesMap['owner'],
+        permissions: [],
+        status: 'active',
+        emailVerified: true,
+        phoneVerified: true,
+      });
+      console.log(`👑 Created Owner Account: ${sudharEmail}`);
+    } else {
+      console.log(`👑 Owner Account already exists: ${sudharEmail}`);
+    }
+
     // Seed Admin Account
     const adminEmail = 'admin@voltspare.com';
     const adminExists = await Users.findOne({ email: adminEmail, includeDeleted: true });

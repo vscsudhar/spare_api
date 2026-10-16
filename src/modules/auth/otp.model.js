@@ -16,6 +16,10 @@ const otpSchema = new mongoose.Schema(
       required: [true, 'Expiration time is required'],
       expires: 600, // Expires after 10 minutes automatically in MongoDB TTL
     },
+    attempts: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

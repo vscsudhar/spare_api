@@ -1,3 +1,4 @@
+import { uploadFile } from '../../utils/storage.js';
 import productsService from './products.service.js';
 import sendResponse from '../../utils/response.js';
 import catchAsync from '../../utils/catchAsync.js';
@@ -41,8 +42,15 @@ export class ProductsController {
   });
 
   addImage = catchAsync(async (req, res) => {
-    const { url, isDefault } = req.body;
-    const data = await productsService.addImage(req.params.id, url, isDefault);
+    let { url, publicId, isDefault } = req.body || {};
+
+    if (req.file) {
+      const uploadResult = await uploadFile(req.file, { folder: 'voltspare/products', prefix: 'prod' });
+      url = uploadResult.url;
+      publicId = uploadResult.publicId;
+    }
+
+    const data = await productsService.addImage(req.params.id, { url, publicId, isDefault });
     return sendResponse(res, 200, 'Product image added successfully', data);
   });
 

@@ -20,7 +20,7 @@ export const createOrderSchema = z.object({
 
 export const adminUpdateStatusSchema = z.object({
   params: z.object({
-    id: objectIdSchema,
+    id: z.string().min(1, 'Order ID is required'),
   }),
   body: z.object({
     status: z.enum([
@@ -29,6 +29,7 @@ export const adminUpdateStatusSchema = z.object({
       'processing',
       'packed',
       'shipped',
+      'in_transit',
       'out_for_delivery',
       'delivered',
       'cancelled',
@@ -40,10 +41,10 @@ export const adminUpdateStatusSchema = z.object({
 
 export const adminAssignDeliverySchema = z.object({
   params: z.object({
-    id: objectIdSchema,
+    id: z.string().min(1, 'Order ID is required'),
   }),
   body: z.object({
-    driverId: objectIdSchema,
+    driverId: z.string().min(1, 'Driver ID is required'),
     notes: z.string().optional(),
   }),
 });

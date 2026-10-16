@@ -1,3 +1,4 @@
+import { uploadFile } from '../../utils/storage.js';
 import catchAsync from '../../utils/catchAsync.js';
 import supportTicketsService from './support-tickets.service.js';
 
@@ -5,9 +6,10 @@ export const supportTicketsController = {
   createTicket: catchAsync(async (req, res) => {
     const photoUrls = [];
     if (req.files && Array.isArray(req.files)) {
-      req.files.forEach(file => {
-        photoUrls.push(`/uploads/${file.filename}`);
-      });
+      for (const file of req.files) {
+        const uploadResult = await uploadFile(file, { folder: 'voltspare/support-tickets', prefix: 'ticket' });
+        photoUrls.push(uploadResult.url);
+      }
     }
     if (req.body.photos && Array.isArray(req.body.photos)) {
       req.body.photos.forEach(p => {
@@ -56,9 +58,10 @@ export const supportTicketsController = {
     );
     const attachmentUrls = [];
     if (req.files && Array.isArray(req.files)) {
-      req.files.forEach(file => {
-        attachmentUrls.push(`/uploads/${file.filename}`);
-      });
+      for (const file of req.files) {
+        const uploadResult = await uploadFile(file, { folder: 'voltspare/support-tickets', prefix: 'ticket' });
+        attachmentUrls.push(uploadResult.url);
+      }
     }
     if (req.body.attachments && Array.isArray(req.body.attachments)) {
       req.body.attachments.forEach(a => {

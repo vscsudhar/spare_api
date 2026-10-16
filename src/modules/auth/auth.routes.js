@@ -33,6 +33,13 @@ router.post('/forgot-password/verify-otp', validate(verifyOtpSchema), authContro
 router.post('/forgot-password/reset-password', validate(resetPasswordSchema), authController.resetPassword);
 router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
 
+// Customer password recovery aliases
+router.post('/customer/forgot-password', validate(forgotPasswordSchema), authController.forgotPassword);
+router.post('/customer/forgot-password/check-email', validate(forgotPasswordSchema), authController.forgotPassword);
+router.post('/customer/forgot-password/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
+router.post('/customer/forgot-password/reset-password', validate(resetPasswordSchema), authController.resetPassword);
+router.post('/customer/reset-password', validate(resetPasswordSchema), authController.resetPassword);
+
 // OTP endpoints
 router.post('/send-otp', validate(sendOtpSchema), authController.sendOtp);
 router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);

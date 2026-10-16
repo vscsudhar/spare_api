@@ -72,8 +72,8 @@ export class AuthController {
   });
 
   forgotPassword = catchAsync(async (req, res) => {
-    const { email } = req.body;
-    const result = await authService.forgotPassword(email);
+    const { email, phone, identifier } = req.body;
+    const result = await authService.forgotPassword({ email, phone, identifier });
 
     return sendResponse(res, 200, result.message, result);
   });
@@ -100,11 +100,11 @@ export class AuthController {
   });
 
   sendOtp = catchAsync(async (req, res) => {
-    const { email, phone } = req.body;
-    const identifier = email || phone;
-    const result = await authService.sendOtp(identifier);
+    const { email, phone, identifier } = req.body;
+    const targetIdentifier = email || phone || identifier;
+    const result = await authService.sendOtp({ email, phone, identifier: targetIdentifier });
 
-    return sendResponse(res, 200, 'OTP sent successfully', result);
+    return sendResponse(res, 200, result.message || 'OTP sent successfully', result);
   });
 }
 

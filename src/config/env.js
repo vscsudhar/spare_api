@@ -30,12 +30,24 @@ const envSchema = z.zodSchema
       AWS_SECRET_ACCESS_KEY: z.string().optional().or(z.literal('')),
       AWS_REGION: z.string().optional().or(z.literal('')),
       AWS_S3_BUCKET_NAME: z.string().optional().or(z.literal('')),
-      STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),
+      STORAGE_PROVIDER: z.enum(['local', 's3', 'cloudinary']).default('cloudinary'),
       BACKEND_URL: z.string().optional().or(z.literal('')),
       OWNER_NAME: z.string().default('System Owner'),
       OWNER_EMAIL: z.string().email('Invalid owner email address'),
       OWNER_PASSWORD: z.string().min(8, 'Owner password must be at least 8 characters long'),
       OWNER_PHONE: z.string().min(1, 'Owner phone is required'),
+      SMTP_HOST: z.string().default('smtp.gmail.com'),
+      SMTP_PORT: z
+        .string()
+        .transform((val) => parseInt(val, 10))
+        .default('465'),
+      SMTP_USER: z.string().optional().or(z.literal('')),
+      SMTP_PASS: z.string().optional().or(z.literal('')),
+      FIREBASE_PROJECT_ID: z.string().optional().or(z.literal('')),
+      FIREBASE_CLIENT_EMAIL: z.string().optional().or(z.literal('')),
+      FIREBASE_PRIVATE_KEY: z.string().optional().or(z.literal('')),
+      FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional().or(z.literal('')),
+      FIREBASE_SERVICE_ACCOUNT_KEY: z.string().optional().or(z.literal('')),
     });
 
 const parseEnv = () => {

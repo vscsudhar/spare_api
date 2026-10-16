@@ -37,6 +37,15 @@ export const errorHandler = (err, req, res, _next) => {
     error = new AppError(message, 400);
   }
 
+  // Handle Multer File Upload Errors
+  if (err.name === 'MulterError') {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      error = new AppError('Each product image must be 5 MB or smaller.', 400);
+    } else {
+      error = new AppError(err.message, 400);
+    }
+  }
+
   // Handle JWT errors
   if (err.name === 'JsonWebTokenError') {
     error = new AppError('Invalid token. Please log in again.', 401);
