@@ -3,6 +3,24 @@ import sendResponse from '../../utils/response.js';
 import catchAsync from '../../utils/catchAsync.js';
 
 export class AuthController {
+
+  customerGoogleLogin = catchAsync(async (req, res) => {
+    const { idToken } = req.body;
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'] || '';
+
+    const result = await authService.customerGoogleLogin(idToken, ip, userAgent);
+
+    return sendResponse(res, 200, 'Google login successful', result);
+  });
+
+  updateCustomerPhone = catchAsync(async (req, res) => {
+    const { phone } = req.body;
+    const result = await authService.updateCustomerPhone(req.user._id, phone);
+
+    return sendResponse(res, 200, result.message || 'Mobile number updated successfully', result);
+  });
+
   adminLogin = catchAsync(async (req, res) => {
     const { email, password } = req.body;
     const ip = req.ip || req.connection.remoteAddress;

@@ -4,6 +4,8 @@ import validate from '../../middlewares/validate.js';
 import protect from '../../middlewares/auth.middleware.js';
 import loginLimiter from '../../middlewares/rateLimiter.js';
 import {
+  customerGoogleLoginSchema,
+  updateCustomerPhoneSchema,
   adminLoginSchema,
   customerRegisterSchema,
   customerLoginSchema,
@@ -20,6 +22,8 @@ const router = Router();
 // Rate limited endpoints
 router.post('/admin/login', loginLimiter, validate(adminLoginSchema), authController.adminLogin);
 router.post('/customer/login', loginLimiter, validate(customerLoginSchema), authController.customerLogin);
+router.post('/customer/google', validate(customerGoogleLoginSchema), authController.customerGoogleLogin);
+router.post('/google', validate(customerGoogleLoginSchema), authController.customerGoogleLogin);
 
 // Standard auth endpoints
 router.post('/customer/register', validate(customerRegisterSchema), authController.customerRegister);
@@ -50,5 +54,6 @@ router.use(protect);
 router.post('/logout-all', authController.logoutAll);
 router.get('/me', authController.getMe);
 router.patch('/change-password', validate(changePasswordSchema), authController.changePassword);
+router.patch('/customer/mobile-number', validate(updateCustomerPhoneSchema), authController.updateCustomerPhone);
 
 export default router;

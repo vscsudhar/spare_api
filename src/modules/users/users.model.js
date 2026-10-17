@@ -16,13 +16,23 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      required: [true, 'Phone number is required'],
+      default: null,
       trim: true,
     },
     passwordHash: {
       type: String,
-      required: [true, 'Password hash is required'],
+      default: null,
       select: false,
+    },
+    firebaseUid: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    authProvider: {
+      type: String,
+      enum: ['local', 'google'],
+      default: 'local',
     },
     profileImage: {
       type: String,
@@ -104,10 +114,24 @@ const userSchema = new mongoose.Schema(
 
 // Compound unique indexes: Email and phone are unique per role (customers separate from staff/users)
 userSchema.index({ email: 1, role: 1 }, { unique: true });
-userSchema.index({ phone: 1, role: 1 }, { unique: true });
+userSchema.index(
+  { phone: 1, role: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { phone: { $type: 'string', $gt: '' } },
+  }
+);
+userSchema.index(
+  { firebaseUid: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { firebaseUid: { $type: 'string', $gt: '' } },
+  }
+);
 
 // Method to verify password
 userSchema.methods.comparePassword = async function (candidatePassword) {
+  if (!this.passwordHash) return false;
   return bcrypt.compare(candidatePassword, this.passwordHash);
 };
 

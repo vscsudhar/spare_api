@@ -10,6 +10,7 @@ import Products from '../products/products.model.js';
 import Categories from '../categories/categories.model.js';
 import Order from '../orders/orders.model.js';
 import Addresses from '../addresses/addresses.model.js';
+import Users from '../users/users.model.js';
 import { InventoryItem, StockMovement } from '../inventory/inventory.model.js';
 import { runInTransaction } from '../../utils/transaction.js';
 import { uploadFile } from '../../utils/storage.js';
@@ -33,7 +34,6 @@ export const rareRequestsService = {
     let customerName = data.customerName || '';
     let phone = data.phone || '';
     try {
-      const Users = (await import('../users/users.model.js')).default;
       const userDoc = await Users.findById(userId);
       if (userDoc) {
         if (!customerName) customerName = userDoc.name || '';
@@ -841,8 +841,8 @@ export const rareRequestsService = {
       if (!address) {
         const userDoc = await Users.findById(requestDoc.user).session(session);
         address = {
-          recipientName: userDoc?.name || 'Customer',
-          phone: userDoc?.phone || '9876543210',
+          recipientName: userDoc?.name || requestDoc.customerName || 'Customer',
+          phone: userDoc?.phone || requestDoc.phone || '9876543210',
           addressLine1: 'Customer Primary Delivery Address',
           addressLine2: '',
           city: 'Chennai',

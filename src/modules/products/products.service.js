@@ -127,6 +127,7 @@ export const productsService = {
       const wishlistedSet = new Set((wishlist?.products || []).map((id) => id.toString()));
       formattedProducts = products.map((p) => {
         const obj = p.toObject ? p.toObject() : { ...p };
+        obj.compatibleVehicles = obj.compatibilities || [];
         return {
           ...obj,
           isWishlist: wishlistedSet.has(p._id.toString()),
@@ -135,6 +136,7 @@ export const productsService = {
     } else {
       formattedProducts = products.map((p) => {
         const obj = p.toObject ? p.toObject() : { ...p };
+        obj.compatibleVehicles = obj.compatibilities || [];
         return {
           ...obj,
           isWishlist: false,

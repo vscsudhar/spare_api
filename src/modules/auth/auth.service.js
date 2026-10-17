@@ -1,3 +1,4 @@
+import { getFirebaseAuth } from '../../config/firebase.js';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -108,6 +109,13 @@ export const authService = {
         failureReason: 'Customer attempting admin login',
       });
       throw new AppError('Access denied: You are not authorized to log in here.', 403);
+    }
+
+    if (!user.passwordHash) {
+      if (user.authProvider === 'google' || user.firebaseUid) {
+        throw new AppError('This account was registered with Google. Please try signing in with Google.', 400);
+      }
+      throw new AppError('Invalid email or password.', 401);
     }
 
     const isMatch = await user.comparePassword(password);
@@ -226,6 +234,26 @@ export const authService = {
       });
       throw new AppError('Your account is deactivated or suspended.', 403);
     }
+
+    if (user.role && user.role.name !== 'customer') {
+      await LoginAudit.create({
+        user: user._id,
+        email,
+        ipAddress: ip,
+        userAgent,
+        status: 'failed',
+        failureReason: 'Staff attempting customer login',
+      });
+      throw new AppError('Access denied: Staff accounts must use the staff portal.', 403);
+    }
+
+    if (!user.passwordHash) {
+      if (user.authProvider === 'google' || user.firebaseUid) {
+        throw new AppError('This account was registered with Google. Please try signing in with Google.', 400);
+      }
+      throw new AppError('Invalid email or password.', 401);
+    }
+
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
@@ -557,9 +585,14 @@ export const authService = {
       throw new AppError('User not found.', 404);
     }
 
-    const isMatch = await user.comparePassword(oldPassword);
-    if (!isMatch) {
-      throw new AppError('Incorrect old password.', 400);
+    if (user.passwordHash) {
+      if (!oldPassword) {
+        throw new AppError('Current password is required to change password.', 400);
+      }
+      const isMatch = await user.comparePassword(oldPassword);
+      if (!isMatch) {
+        throw new AppError('Incorrect old password.', 400);
+      }
     }
 
     user.passwordHash = await bcrypt.hash(newPassword, 10);
@@ -743,6 +776,173 @@ export const authService = {
       resetToken,
       token: resetToken,
       verified: true,
+    };
+  },
+
+  /**
+   * Google Sign-In for Customers
+   * Verifies Firebase ID Token, performs atomic check/create, enforces no blind merge,
+   * checks mobile number presence, and issues JWT tokens.
+   */
+  customerGoogleLogin: async (idToken, ip, userAgent) => {
+    const firebaseAuth = await getFirebaseAuth();
+    if (!firebaseAuth) {
+      throw new AppError('Firebase authentication service is not configured on server.', 500);
+    }
+
+    let decodedToken;
+    try {
+      decodedToken = await firebaseAuth.verifyIdToken(idToken);
+    } catch (tokenErr) {
+      console.error('Firebase ID token verification failed:', tokenErr.message);
+      throw new AppError('Invalid or expired Google authentication token.', 401);
+    }
+
+    const { uid, email, name, picture, email_verified } = decodedToken;
+    if (!email) {
+      throw new AppError('Google account does not provide an email address.', 400);
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const customerRole = await Role.findOne({ name: 'customer' });
+    if (!customerRole) {
+      throw new AppError('Customer role has not been seeded.', 500);
+    }
+
+    // 1. Identify Google user by stable verified provider identifier (firebaseUid)
+    let user = await Users.findOne({
+      firebaseUid: uid,
+      role: customerRole._id,
+    }).populate('role');
+
+    // 2. If not found by firebaseUid, check if customer exists with the same email
+    if (!user) {
+      const existingEmailCustomer = await Users.findOne({
+        email: cleanEmail,
+        role: customerRole._id,
+      }).populate('role');
+
+      if (existingEmailCustomer) {
+        // If already bound to another firebaseUid, reject
+        if (existingEmailCustomer.firebaseUid && existingEmailCustomer.firebaseUid !== uid) {
+          throw new AppError('This email is already associated with another Google account.', 409);
+        }
+
+        // Do not merge existing accounts merely because email matches without verification
+        if (existingEmailCustomer.authProvider === 'local' && !existingEmailCustomer.firebaseUid) {
+          throw new AppError('An account with this email already exists with password login. Please log in with your email and password.', 409);
+        }
+
+        existingEmailCustomer.firebaseUid = uid;
+        if (!existingEmailCustomer.profileImage && picture) {
+          existingEmailCustomer.profileImage = picture;
+        }
+        await existingEmailCustomer.save();
+        user = existingEmailCustomer;
+      } else {
+        // 3. Atomically create new customer record
+        try {
+          const newUser = await Users.create({
+            name: name || cleanEmail.split('@')[0],
+            email: cleanEmail,
+            phone: null,
+            passwordHash: null,
+            firebaseUid: uid,
+            authProvider: 'google',
+            profileImage: picture || '',
+            role: customerRole._id,
+            status: 'active',
+            emailVerified: Boolean(email_verified),
+          });
+          user = await Users.findById(newUser._id).populate('role');
+        } catch (dbErr) {
+          if (dbErr.code === 11000) {
+            user = await Users.findOne({
+              $or: [{ firebaseUid: uid }, { email: cleanEmail, role: customerRole._id }],
+            }).populate('role');
+            if (!user) {
+              throw new AppError('Conflict creating customer record. Please try again.', 409);
+            }
+          } else {
+            throw dbErr;
+          }
+        }
+      }
+    }
+
+    if (user.status !== 'active') {
+      await LoginAudit.create({
+        user: user._id,
+        email: cleanEmail,
+        ipAddress: ip,
+        userAgent,
+        status: 'failed',
+        failureReason: `Account is ${user.status}`,
+      });
+      throw new AppError('Your account is deactivated or suspended.', 403);
+    }
+
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = await generateRefreshToken(user);
+
+    await LoginAudit.create({ user: user._id, email: user.email, ipAddress: ip, userAgent, status: 'success' });
+
+    const needsMobileNumber = !user.phone || user.phone.trim().length === 0;
+
+    const userObj = user.toObject ? user.toObject() : { ...user };
+    delete userObj.passwordHash;
+    userObj.hasPassword = Boolean(user.passwordHash);
+    userObj.hasPhone = !needsMobileNumber;
+
+    return {
+      user: userObj,
+      accessToken,
+      refreshToken,
+      needsMobileNumber,
+    };
+  },
+
+  /**
+   * Register or update mobile number for verified customer
+   */
+  updateCustomerPhone: async (userId, rawPhone) => {
+    const cleanPhone = (rawPhone || '').trim();
+    if (!cleanPhone || cleanPhone.length < 5) {
+      throw new AppError('A valid mobile number is required.', 400);
+    }
+
+    const customerRole = await Role.findOne({ name: 'customer' });
+    const user = await Users.findById(userId).populate('role');
+    if (!user) {
+      throw new AppError('Customer record not found.', 404);
+    }
+
+    const phoneTaken = await Users.findOne({
+      phone: cleanPhone,
+      role: customerRole ? customerRole._id : user.role._id,
+      _id: { $ne: user._id },
+    });
+
+    if (phoneTaken) {
+      throw new AppError('This mobile number is already registered for another account.', 400);
+    }
+
+    user.phone = cleanPhone;
+    user.phoneVerified = true;
+    await user.save();
+
+    const populatedUser = await Users.findById(user._id).populate('role');
+    const userObj = populatedUser.toObject ? populatedUser.toObject() : { ...populatedUser };
+    delete userObj.passwordHash;
+    userObj.hasPassword = Boolean(populatedUser.passwordHash);
+    userObj.hasPhone = true;
+
+    return {
+      user: userObj,
+      message: 'Mobile number registered successfully.',
     };
   },
 };

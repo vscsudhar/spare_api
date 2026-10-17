@@ -127,7 +127,7 @@ export class RareRequestsController {
   });
 
   adminConvertToOrder = catchAsync(async (req, res) => {
-    const { addressId } = req.body;
+    const { addressId } = req.body || {};
     const data = await rareRequestsService.adminConvertToOrder(req.params.id, addressId, req.user._id);
     return sendResponse(res, 201, 'Request converted to order successfully', data);
   });

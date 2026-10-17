@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'url';
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import fs from 'fs';
@@ -27,8 +28,17 @@ export const initFirebaseAdmin = () => {
       process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
       path.resolve(process.cwd(), 'service-account.json');
 
-    if (fs.existsSync(serviceAccountPath)) {
-      const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+        let resolvedPath = serviceAccountPath;
+    if (!fs.existsSync(resolvedPath)) {
+      const currentDir = path.dirname(fileURLToPath(import.meta.url));
+      const fallbackPath = path.resolve(currentDir, '..', '..', 'service-account.json');
+      if (fs.existsSync(fallbackPath)) {
+        resolvedPath = fallbackPath;
+      }
+    }
+
+    if (fs.existsSync(resolvedPath)) {
+      const serviceAccount = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
       firebaseApp = initializeApp({
         credential: cert(serviceAccount),
         projectId: serviceAccount.project_id || process.env.FIREBASE_PROJECT_ID,
@@ -97,7 +107,28 @@ export const getFirebaseMessaging = () => {
   }
 };
 
+
+let firebaseAuthInstance = null;
+export const getFirebaseAuth = async () => {
+  if (firebaseAuthInstance) return firebaseAuthInstance;
+  if (!isInitialized) {
+    initFirebaseAdmin();
+  }
+  if (!isInitialized || getApps().length === 0) {
+    return null;
+  }
+  try {
+    const { getAuth } = await import('firebase-admin/auth');
+    firebaseAuthInstance = getAuth(getApps()[0]);
+    return firebaseAuthInstance;
+  } catch (err) {
+    console.error('Failed to get Firebase Auth instance:', err.message);
+    return null;
+  }
+};
+
 export default {
+  getFirebaseAuth,
   initFirebaseAdmin,
   getFirebaseMessaging,
 };

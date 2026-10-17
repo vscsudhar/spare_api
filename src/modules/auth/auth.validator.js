@@ -60,7 +60,7 @@ export const resetPasswordSchema = z.object({
 
 export const changePasswordSchema = z.object({
   body: z.object({
-    oldPassword: z.string().min(1, 'Old password is required'),
+    oldPassword: z.string().optional(),
     newPassword: strongPassword,
   }),
 });
@@ -87,5 +87,17 @@ export const verifyOtpSchema = z.object({
   }).refine((data) => data.identifier || data.email || data.phone, {
     message: 'Either identifier, email, or phone must be provided',
     path: ['identifier'],
+  }),
+});
+
+export const customerGoogleLoginSchema = z.object({
+  body: z.object({
+    idToken: z.string().min(1, 'Firebase ID token is required'),
+  }),
+});
+
+export const updateCustomerPhoneSchema = z.object({
+  body: z.object({
+    phone: z.string().min(5, 'Valid phone number is required').trim(),
   }),
 });
